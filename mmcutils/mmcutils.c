@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
+#include <libgen.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/reboot.h>
@@ -463,7 +464,7 @@ mmc_raw_copy (const MmcPartition *partition, char *in_file) {
         }
     }
 
-    fsync(out);
+    fflush(out);
     ret = 0;
 ERROR1:
     fclose ( out );
@@ -498,6 +499,10 @@ mmc_raw_dump_internal (const char* in_file, const char *out_file) {
     sz = ftell(in);
     fseek(in, 0L, SEEK_SET);
 
+    // defy hack to support part of partition
+    if (strcmp("logo", basename(in_file))==0 && sz > 0x40000)
+        sz = 0x40000;
+
     if (sz % 512)
     {
         while ( ( ch = fgetc ( in ) ) != EOF )
@@ -514,7 +519,7 @@ mmc_raw_dump_internal (const char* in_file, const char *out_file) {
         }
     }
 
-    fsync(out);
+    fflush(out);
     ret = 0;
 ERROR1:
     fclose ( out );

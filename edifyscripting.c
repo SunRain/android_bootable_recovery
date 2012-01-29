@@ -14,7 +14,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-
+#include <libgen.h>
 #include <sys/wait.h>
 #include <sys/limits.h>
 #include <dirent.h>
@@ -33,9 +33,6 @@
 #include "roots.h"
 #include "recovery_ui.h"
 
-#include "../../external/yaffs2/yaffs2/utils/mkyaffs2image.h"
-#include "../../external/yaffs2/yaffs2/utils/unyaffs.h"
-
 #include "extendedcommands.h"
 #include "nandroid.h"
 #include "mounts.h"
@@ -44,6 +41,8 @@
 #include "mtdutils/mtdutils.h"
 #include "mmcutils/mmcutils.h"
 //#include "edify/parser.h"
+
+#include "yaffs2.h"
 
 Value* UIPrintFn(const char* name, State* state, int argc, Expr* argv[]) {
     char** args = ReadVarArgs(state, argc, argv);
@@ -139,7 +138,7 @@ Value* FormatFn(const char* name, State* state, int argc, Expr* argv[]) {
     }
     
     if (strcmp(path, "/data") == 0 && has_datadata()) {
-        ui_print("Formatting /datadata...\n", path);
+        ui_print("Formatting /datadata...\n");
         if (0 != format_volume("/datadata")) {
             free(path);
             return StringValue(strdup(""));
@@ -164,7 +163,7 @@ Value* BackupFn(const char* name, State* state, int argc, Expr* argv[]) {
         return NULL;
     }
     
-    if (0 != nandroid_backup(path))
+    if (0 != nandroid_backup(path, BACKUP_ALL))
         return StringValue(strdup(""));
     
     return StringValue(strdup(path));
@@ -184,26 +183,22 @@ Value* RestoreFn(const char* name, State* state, int argc, Expr* argv[]) {
     args2[argc] = NULL;
     
     char* path = strdup(args2[0]);
-    int restoreboot = 1;
-    int restoresystem = 1;
-    int restoredata = 1;
-    int restorecache = 1;
-    int restoresdext = 1;
+    int parts = BAK_BOOT|BAK_DEVTREE|BAK_RECOVERY | BAK_SYSTEM|BAK_DATA|BAK_CACHE|BAK_SDEXT;
     int i;
     for (i = 1; i < argc; i++)
     {
         if (args2[i] == NULL)
             continue;
         if (strcmp(args2[i], "noboot") == 0)
-            restoreboot = 0;
+            parts -= BAK_BOOT|BAK_DEVTREE|BAK_RECOVERY;
         else if (strcmp(args2[i], "nosystem") == 0)
-            restoresystem = 0;
+            parts -= BAK_SYSTEM;
         else if (strcmp(args2[i], "nodata") == 0)
-            restoredata = 0;
+            parts -= BAK_DATA;
         else if (strcmp(args2[i], "nocache") == 0)
-            restorecache = 0;
+            parts -= BAK_CACHE;
         else if (strcmp(args2[i], "nosd-ext") == 0)
-            restoresdext = 0;
+            parts -= BAK_SDEXT;
     }
     
     for (i = 0; i < argc; ++i) {
@@ -212,7 +207,7 @@ Value* RestoreFn(const char* name, State* state, int argc, Expr* argv[]) {
     free(args);
     free(args2);
 
-    if (0 != nandroid_restore(path, restoreboot, restoresystem, restoredata, restorecache, restoresdext, 0)) {
+    if (0 != nandroid_restore(path, parts)) {
         free(path);
         return StringValue(strdup(""));
     }
@@ -298,8 +293,6 @@ int run_script_from_buffer(char* script_data, int script_len, char* filename)
     return 0;
 }
 
-
-
 #define EXTENDEDCOMMAND_SCRIPT "/cache/recovery/extendedcommand"
 
 int run_and_remove_extendedcommand()
@@ -350,6 +343,7 @@ int run_and_remove_extendedcommand()
 #endif
     return run_script(tmp);
 }
+
 
 int extendedcommand_file_exists()
 {
@@ -409,7 +403,7 @@ int run_script(char* filename)
 {
     struct stat file_info;
     if (0 != stat(filename, &file_info)) {
-        printf("Error executing stat on file: %s\n", filename);
+        printf("Script not found: %s\n", filename);
         return 1;
     }
 

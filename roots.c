@@ -61,12 +61,9 @@ void load_volume_table() {
     device_volumes = malloc(alloc * sizeof(Volume));
 
     // Insert an entry for /tmp, which is the ramdisk and is always mounted.
+    memset(&device_volumes[0], 0, sizeof(Volume));
     device_volumes[0].mount_point = "/tmp";
     device_volumes[0].fs_type = "ramdisk";
-    device_volumes[0].device = NULL;
-    device_volumes[0].device2 = NULL;
-    device_volumes[0].fs_options = NULL;
-    device_volumes[0].fs_options2 = NULL;
     num_volumes = 1;
 
     FILE* fstab = fopen("/etc/recovery.fstab", "r");
@@ -98,6 +95,7 @@ void load_volume_table() {
                 alloc *= 2;
                 device_volumes = realloc(device_volumes, alloc*sizeof(Volume));
             }
+            memset(&device_volumes[num_volumes], 0, sizeof(Volume));
             device_volumes[num_volumes].mount_point = strdup(mount_point);
             device_volumes[num_volumes].fs_type = !is_null(fs_type2) ? strdup(fs_type2) : strdup(fs_type);
             device_volumes[num_volumes].device = strdup(device);
@@ -213,6 +211,14 @@ int ensure_path_mounted_at_mount_point(const char* path, const char* mount_point
         find_mounted_volume_by_mount_point(mount_point);
     if (mv) {
         // volume is already mounted
+
+        #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+        if (strcmp(v->mount_point, "/system") == 0) {
+            __system("mount -o remount,rw /system");
+            //__system("echo 0 > /sys/class/leds/red/brightness");
+        }
+        #endif
+
         return 0;
     }
 
@@ -259,13 +265,24 @@ int ensure_path_unmounted(const char* path) {
         return 0;
     }
 
+    #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+    if (strcmp(path, "/system") == 0) {
+        __system("sync");
+
+    // comment to test remount rw
+    //return 0;
+    }
+    #endif
+
     Volume* v = volume_for_path(path);
     if (v == NULL) {
         // no /sdcard? let's assume /data/media
         if (strstr(path, "/sdcard") == path && is_data_media()) {
             return ensure_path_unmounted("/data");
         }
-        LOGE("unknown volume for path [%s]\n", path);
+        if (strcmp(path, "/sd-ext") == 0) {
+           LOGE("unknown volume for path [%s]\n", path);
+        }
         return -1;
     }
     if (strcmp(v->fs_type, "ramdisk") == 0) {
@@ -314,6 +331,24 @@ int format_volume(const char* volume) {
         return -1;
 #endif
         return format_unknown_device(v->device, volume, NULL);
+    }
+
+    // force the "rm -rf" method
+    int rmrf_format=0;
+
+    #ifdef NEVER_FORMAT_PARTITIONS
+    rmrf_format=1;
+    #endif
+
+    #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+    if (strcmp(v->mount_point, "/system") == 0) {
+        rmrf_format=1;
+    }
+    #endif
+
+    if (rmrf_format) {
+        // use directly the "rm -rf" method
+        return format_unknown_device(v->device, volume, v->fs_type);
     }
 
     if (ensure_path_unmounted(volume) != 0) {

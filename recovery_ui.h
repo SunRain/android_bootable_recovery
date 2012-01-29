@@ -76,6 +76,10 @@ int device_wipe_data();
 #define ITEM_ADVANCED        7
 #define ITEM_POWEROFF        8          
 
+#define ITEM_EXITRECOVERY    9
+
+#define ITEM_LASTEST ITEM_EXITRECOVERY
+
 // Header text to display above the main menu.
 extern char* MENU_HEADERS[];
 
@@ -87,5 +91,8 @@ get_menu_selection(char** headers, char** items, int menu_only, int initial_sele
 
 void
 set_sdcard_update_bootloader_message();
+
+int
+get_allow_toggle_display();
 
 #endif

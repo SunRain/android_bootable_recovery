@@ -18,7 +18,6 @@ LOCAL_SRC_FILES := \
     mounts.c \
     extendedcommands.c \
     nandroid.c \
-    ../../system/core/toolbox/reboot.c \
     firmware.c \
     edifyscripting.c \
     setprop.c
@@ -30,26 +29,42 @@ LOCAL_MODULE := recovery
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
-ifdef I_AM_KOUSH
-RECOVERY_NAME := ClockworkMod Recovery
-LOCAL_CFLAGS += -DI_AM_KOUSH
-else
-RECOVERY_NAME := CWM-based Recovery
-endif
+RECOVERY_NAME := CyanogenDefy Recovery
 
-RECOVERY_VERSION := $(RECOVERY_NAME) v5.0.2.7
+RECOVERY_VERSION := $(RECOVERY_NAME) v5.0.3.9
 
 LOCAL_CFLAGS += -DRECOVERY_VERSION="$(RECOVERY_VERSION)"
+
+# Version suffix, only displayed on screen in headers
+LOCAL_CFLAGS += -DRECOVERY_SUFFIX="-$(TARGET_BOOTLOADER_BOARD_NAME)"
+
+ifeq ($(BOARD_USES_BOOTMENU),true)
+    LOCAL_MODULE_PATH := $(PRODUCT_OUT)/system/bootmenu/recovery/sbin
+    BOARD_NEVER_UMOUNT_SYSTEM := true
+endif
+
+ifeq ($(TARGET_BOOTLOADER_BOARD_NAME),olympus)
+    LOCAL_CFLAGS += -DUNLOCKED_DEVICE
+    LOCAL_MODULE_PATH := $(PRODUCT_OUT)/recovery/root/sbin
+endif
+
 RECOVERY_API_VERSION := 2
 LOCAL_CFLAGS += -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 
-BOARD_RECOVERY_DEFINES := BOARD_HAS_NO_SELECT_BUTTON BOARD_HAS_SMALL_RECOVERY BOARD_LDPI_RECOVERY BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES BOARD_RECOVERY_HANDLES_MOUNT
+BOARD_RECOVERY_DEFINES := \
+    BOARD_HAS_NO_SELECT_BUTTON BOARD_HAS_SMALL_RECOVERY BOARD_LDPI_RECOVERY \
+    BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES \
+    BOARD_RECOVERY_HANDLES_MOUNT BOARD_NEVER_UMOUNT_SYSTEM \
+
+# not enabled : WIPE_DATA_ERASE_SDEXT
 
 $(foreach board_define,$(BOARD_RECOVERY_DEFINES), \
   $(if $($(board_define)), \
     $(eval LOCAL_CFLAGS += -D$(board_define)=\"$($(board_define))\") \
   ) \
-  )
+ )
+
+LOCAL_CFLAGS += -DBUILD_TOP="$(ANDROID_BUILD_TOP)"
 
 # This binary is in the recovery ramdisk, which is otherwise a copy of root.
 # It gets copied there in config/Makefile.  LOCAL_MODULE_TAGS suppresses
@@ -69,7 +84,7 @@ LOCAL_STATIC_LIBRARIES += librebootrecovery
 LOCAL_STATIC_LIBRARIES += libext4_utils libz
 LOCAL_STATIC_LIBRARIES += libminzip libunz libmincrypt
 
-LOCAL_STATIC_LIBRARIES += libedify libbusybox libclearsilverregex libmkyaffs2image libunyaffs liberase_image libdump_image libflash_image
+LOCAL_STATIC_LIBRARIES += libedify libbusybox libmkyaffs2image libunyaffs liberase_image libdump_image libflash_image
 
 LOCAL_STATIC_LIBRARIES += libcrecovery libflashutils libmtdutils libmmcutils libbmlutils 
 
@@ -144,8 +159,6 @@ LOCAL_MODULE_TAGS := tests
 LOCAL_STATIC_LIBRARIES := libmincrypt libcutils libstdc++ libc
 
 include $(BUILD_EXECUTABLE)
-
-include $(commands_recovery_local_path)/dedupe/Android.mk
 
 include $(commands_recovery_local_path)/bmlutils/Android.mk
 include $(commands_recovery_local_path)/flashutils/Android.mk
