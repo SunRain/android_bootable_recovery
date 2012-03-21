@@ -30,10 +30,21 @@
 
 #include <pixelflinger/pixelflinger.h>
 
-#ifdef BOARD_USE_CUSTOM_RECOVERY_FONT
-#include BOARD_USE_CUSTOM_RECOVERY_FONT
+#if defined(RECOVERY_BGRA)
+# define PIXEL_FORMAT GGL_PIXEL_FORMAT_BGRA_8888
+# define PIXEL_SIZE   4
+#elif defined(RECOVERY_RGBX)
+# define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGBX_8888
+# define PIXEL_SIZE   4
 #else
-#include "font_10x18.h"
+# define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGB_565
+# define PIXEL_SIZE   2
+#endif
+
+#ifndef BOARD_LDPI_RECOVERY
+# include "font_10x18.h"
+#else
+# include "font_7x16.h"
 #endif
 
 #include "minui.h"
@@ -56,7 +67,7 @@ typedef struct {
     unsigned ascent;
 } GRFont;
 
-static GRFont *gr_font = 0;
+static GRFont *gr_font = NULL;
 static GGLContext *gr_context = 0;
 static GGLSurface gr_font_texture;
 static GGLSurface gr_framebuffer[2];
@@ -156,12 +167,21 @@ static int get_framebuffer(GGLSurface *fb)
 }
 
 static void get_memory_surface(GGLSurface* ms) {
+<<<<<<< HEAD
   ms->version = sizeof(*ms);
   ms->width = vi.xres;
   ms->height = vi.yres;
   ms->stride = fi.line_length/PIXEL_SIZE;
   ms->data = malloc(fi.line_length * vi.yres);
   ms->format = PIXEL_FORMAT;
+=======
+    ms->version = sizeof(*ms);
+    ms->width = vi.xres;
+    ms->height = vi.yres;
+    ms->stride = fi.line_length/PIXEL_SIZE;
+    ms->data = malloc(vi.yres * fi.line_length);
+    ms->format = PIXEL_FORMAT;
+>>>>>>> tp/ics
 }
 
 static void set_active_framebuffer(unsigned n)
@@ -182,10 +202,20 @@ void gr_flip(void)
     /* swap front and back buffers */
     gr_active_fb = (gr_active_fb + 1) & 1;
 
+#ifdef BOARD_HAS_FLIPPED_SCREEN
+    /* flip buffer 180 degrees for devices with physicaly inverted screens */
+    unsigned int i, sz = vi.yres * fi.line_length * PIXEL_SIZE;
+    for (i = 1; i < sz; i++) {
+        unsigned short tmp = gr_mem_surface.data[i];
+        gr_mem_surface.data[i] = gr_mem_surface.data[sz - i];
+        gr_mem_surface.data[sz - i] = tmp;
+    }
+#endif
+
     /* copy data from the in-memory surface to the buffer we're about
      * to make active. */
     memcpy(gr_framebuffer[gr_active_fb].data, gr_mem_surface.data,
-           fi.line_length * vi.yres);
+           vi.yres * fi.line_length);
 
     /* inform the display driver */
     set_active_framebuffer(gr_active_fb);
@@ -209,8 +239,10 @@ int gr_measure(const char *s)
 
 void gr_font_size(int *x, int *y)
 {
-    *x = gr_font->cwidth;
-    *y = gr_font->cheight;
+    if (gr_font != NULL) {
+        *x = gr_font->cwidth;
+        *y = gr_font->cheight;
+    }
 }
 
 int gr_text(int x, int y, const char *s)
@@ -382,3 +414,4 @@ void gr_fb_blank(bool blank)
     if (ret < 0)
         perror("ioctl(): blank");
 }
+

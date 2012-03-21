@@ -45,10 +45,13 @@ unsigned int gr_get_height(gr_surface surface);
 // see http://www.mjmwired.net/kernel/Documentation/input/ for info.
 struct input_event;
 
-typedef int (*ev_callback)(int fd, short revents, void *data);
-typedef int (*ev_set_key_callback)(int code, int value, void *data);
+//<<<<<<< HEAD
+//typedef int (*ev_callback)(int fd, short revents, void *data);
+//typedef int (*ev_set_key_callback)(int code, int value, void *data);
 
-int ev_init(ev_callback input_cb, void *data);
+//int ev_init(ev_callback input_cb, void *data);
+//=======
+//>>>>>>> tp/ics
 void ev_exit(void);
 int ev_add_fd(int fd, ev_callback cb, void *data);
 int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data);
@@ -63,7 +66,24 @@ int ev_wait(int timeout);
 int ev_get_input(int fd, short revents, struct input_event *ev);
 void ev_dispatch(void);
 
-// Resources
+typedef int (*ev_callback)(int fd, short revents, void *data);
+typedef int (*ev_set_key_callback)(int code, int value, void *data);
+
+int ev_init_compat(void);
+int ev_init(ev_callback input_cb, void *data);
+
+int ev_add_fd(int fd, ev_callback cb, void *data);
+int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data);
+
+/* timeout has the same semantics as for poll
+ *    0 : don't block
+ *  < 0 : block forever
+ *  > 0 : block for 'timeout' milliseconds
+ */
+int ev_wait(int timeout);
+
+int ev_get_input(int fd, short revents, struct input_event *ev);
+void ev_dispatch(void);
 
 // Returns 0 if no error, else negative.
 int res_create_surface(const char* name, gr_surface* pSurface);

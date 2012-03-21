@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <libgen.h>
 
 #include "bootloader.h"
 #include "common.h"
@@ -40,9 +41,11 @@
 #include "minzip/DirUtil.h"
 #include "roots.h"
 #include "recovery_ui.h"
-
+#include "encryptedfs_provisioning.h"
+#include "firmware.h"
 #include "extendedcommands.h"
 #include "flashutils/flashutils.h"
+#include "yaffs2.h"
 
 static const struct option OPTIONS[] = {
   { "send_intent", required_argument, NULL, 's' },
@@ -408,7 +411,7 @@ copy_sideloaded_package(const char* original_path) {
 
 static char**
 prepend_title(char** headers) {
-    char* title[] = { EXPAND(RECOVERY_VERSION),
+    char* title[] = { EXPAND(RECOVERY_VERSION) EXPAND(RECOVERY_SUFFIX),
                       "",
                       NULL };
 
@@ -493,6 +496,8 @@ get_menu_selection(char** headers, char** items, int menu_only,
             chosen_item = action;
         }
 
+        ui_set_showing_back_button(1);
+        /*
         if (abs(selected - old_selected) > 1) {
             wrap_count++;
             if (wrap_count == 3) {
@@ -507,6 +512,7 @@ get_menu_selection(char** headers, char** items, int menu_only,
                 }
             }
         }
+        */
     }
 
     ui_end_menu();
@@ -537,7 +543,7 @@ update_directory(const char* path, const char* unmount_when_done) {
         return 0;
     }
 
-    char** headers = prepend_title(MENU_HEADERS);
+    char** headers = prepend_title((char **)MENU_HEADERS);
 
     int d_size = 0;
     int d_alloc = 10;
@@ -655,7 +661,7 @@ wipe_data(int confirm) {
                                 "  THIS CAN NOT BE UNDONE.",
                                 "",
                                 NULL };
-            title_headers = prepend_title((const char**)headers);
+            title_headers = prepend_title((char**)headers);
         }
 
         char* items[] = { " No",
@@ -684,20 +690,32 @@ wipe_data(int confirm) {
     if (has_datadata()) {
         erase_volume("/datadata");
     }
+#ifdef WIPE_DATA_ERASE_SDEXT
     erase_volume("/sd-ext");
+#endif
     erase_volume("/sdcard/.android_secure");
     ui_print("Data wipe complete.\n");
 }
 
+int item_count(char ** arstr)
+{
+    int ret=0;
+    while (arstr[ret] != NULL) ret++;
+    return ret;
+}
+
 static void
 prompt_and_wait() {
-    char** headers = prepend_title((const char**)MENU_HEADERS);
+    char** headers = prepend_title((char**)MENU_HEADERS);
 
     for (;;) {
         finish_recovery(NULL);
         ui_reset_progress();
-        
-        ui_menu_level = -1;
+
+        if (item_count(MENU_ITEMS) > ITEM_EXITRECOVERY && !file_exists("/sbin/recoveryexit.sh")) {
+            MENU_ITEMS[ITEM_EXITRECOVERY] = NULL;
+        }
+
         allow_display_toggle = 1;
         int chosen_item = get_menu_selection(headers, MENU_ITEMS, 0, 0);
         allow_display_toggle = 0;
@@ -747,6 +765,14 @@ prompt_and_wait() {
             case ITEM_POWEROFF:
                 poweroff = 1;
                 return;
+            case ITEM_EXITRECOVERY:
+            case GO_BACK:
+                // dont use finish recovery...
+                //finish_recovery(NULL);
+                gr_exit();
+
+                //choose what to do in this script... (kill or not)
+                __system("nohup /sbin/recoveryexit.sh");
         }
     }
 }
@@ -756,28 +782,30 @@ print_property(const char *key, const char *name, void *cookie) {
     printf("%s=%s\n", key, name);
 }
 
+
 int
 main(int argc, char **argv) {
-	if (strcmp(basename(argv[0]), "recovery") != 0)
-	{
-	    if (strstr(argv[0], "flash_image") != NULL)
-	        return flash_image_main(argc, argv);
-	    if (strstr(argv[0], "volume") != NULL)
-	        return volume_main(argc, argv);
-	    if (strstr(argv[0], "edify") != NULL)
-	        return edify_main(argc, argv);
-	    if (strstr(argv[0], "dump_image") != NULL)
-	        return dump_image_main(argc, argv);
-	    if (strstr(argv[0], "erase_image") != NULL)
-	        return erase_image_main(argc, argv);
-	    if (strstr(argv[0], "mkyaffs2image") != NULL)
-	        return mkyaffs2image_main(argc, argv);
-	    if (strstr(argv[0], "unyaffs") != NULL)
-	        return unyaffs_main(argc, argv);
+    if (strncmp(basename(argv[0]), "recovery", 8) != 0)
+    {
+        if (strstr(argv[0], "flash_image") != NULL)
+            return flash_image_main(argc, argv);
+        if (strstr(argv[0], "volume") != NULL)
+            return volume_main(argc, argv);
+        if (strstr(argv[0], "edify") != NULL)
+            return edify_main(argc, argv);
+        if (strstr(argv[0], "dump_image") != NULL)
+            return dump_image_main(argc, argv);
+        if (strstr(argv[0], "erase_image") != NULL)
+            return erase_image_main(argc, argv);
+        if (strstr(argv[0], "mkyaffs2image") != NULL)
+            return mkyaffs2image_main(argc, argv);
+        if (strstr(argv[0], "unyaffs") != NULL)
+            return unyaffs_main(argc, argv);
         if (strstr(argv[0], "nandroid"))
             return nandroid_main(argc, argv);
         if (strstr(argv[0], "reboot"))
-            return reboot_main(argc, argv);
+            return reboot_wrapper(argv[0]);
+//          return reboot_main(argc, argv);
 #ifdef BOARD_RECOVERY_HANDLES_MOUNT
         if (strstr(argv[0], "mount") && argc == 2 && !strstr(argv[0], "umount"))
         {
@@ -786,12 +814,14 @@ main(int argc, char **argv) {
         }
 #endif
         if (strstr(argv[0], "poweroff")){
-            return reboot_main(argc, argv);
+            return reboot_wrapper(argv[0]);
+//          return reboot_main(argc, argv);
         }
         if (strstr(argv[0], "setprop"))
             return setprop_main(argc, argv);
-		return busybox_driver(argc, argv);
-	}
+
+        return busybox_driver(argc, argv);
+    }
     __system("/sbin/postrecoveryboot.sh");
 
     int is_user_initiated_recovery = 0;
@@ -822,11 +852,11 @@ main(int argc, char **argv) {
         case 'p': previous_runs = atoi(optarg); break;
         case 's': send_intent = optarg; break;
         case 'u': update_package = optarg; break;
-        case 'w': 
+        case 'w':
 #ifndef BOARD_RECOVERY_ALWAYS_WIPES
-		wipe_data = wipe_cache = 1;
+                  wipe_data = wipe_cache = 1;
 #endif
-		break;
+                  break;
         case 'c': wipe_cache = 1; break;
         case 't': ui_show_text(1); break;
         case '?':
@@ -864,7 +894,7 @@ main(int argc, char **argv) {
     printf("\n");
 
     int status = INSTALL_SUCCESS;
-
+    
     if (update_package != NULL) {
         status = install_package(update_package);
         if (status != INSTALL_SUCCESS) ui_print("Installation aborted.\n");
@@ -908,6 +938,9 @@ main(int argc, char **argv) {
         ui_set_background(BACKGROUND_ICON_ERROR);
     }
     if (status != INSTALL_SUCCESS || ui_text_visible()) {
+        if (!ui_text_visible()) {
+            ui_set_show_text(1);
+        }
         prompt_and_wait();
     }
 

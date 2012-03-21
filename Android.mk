@@ -13,7 +13,6 @@ LOCAL_SRC_FILES := \
     mounts.c \
     extendedcommands.c \
     nandroid.c \
-    ../../system/core/toolbox/reboot.c \
     firmware.c \
     edifyscripting.c \
     setprop.c \
@@ -27,35 +26,55 @@ LOCAL_MODULE := recovery
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
-ifdef I_AM_KOUSH
-RECOVERY_NAME := ClockworkMod Recovery
-LOCAL_CFLAGS += -DI_AM_KOUSH
-else
-RECOVERY_NAME := CWM-based Recovery
-endif
+RECOVERY_NAME := Bootmenu ICS Recovery
 
-RECOVERY_VERSION := $(RECOVERY_NAME) v5.5.0.4
+RECOVERY_VERSION := $(RECOVERY_NAME) v5.5.1
 
 LOCAL_CFLAGS += -DRECOVERY_VERSION="$(RECOVERY_VERSION)"
+
+# Version suffix, only displayed on screen in headers
+LOCAL_CFLAGS += -DRECOVERY_SUFFIX="-$(TARGET_BOOTLOADER_BOARD_NAME)"
+
+ifeq ($(BOARD_USES_BOOTMENU),true)
+    LOCAL_MODULE_PATH := $(PRODUCT_OUT)/system/bootmenu/recovery/sbin
+    BOARD_NEVER_UMOUNT_SYSTEM := true
+endif
+
+ifeq ($(TARGET_BOOTLOADER_BOARD_NAME),olympus)
+    LOCAL_CFLAGS += -DUNLOCKED_DEVICE
+    LOCAL_MODULE_PATH := $(PRODUCT_OUT)/recovery/root/sbin
+endif
+
 RECOVERY_API_VERSION := 2
 LOCAL_CFLAGS += -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 
 ifneq ($(BOARD_USE_CUSTOM_RECOVERY_FONT),)
-  BOARD_RECOVERY_CHAR_WIDTH := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 1)
-  BOARD_RECOVERY_CHAR_HEIGHT := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 2)
+    BOARD_RECOVERY_CHAR_WIDTH := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 1)
+    BOARD_RECOVERY_CHAR_HEIGHT := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 2)
 else
-  BOARD_RECOVERY_CHAR_WIDTH := 10
-  BOARD_RECOVERY_CHAR_HEIGHT := 18
+    BOARD_RECOVERY_CHAR_WIDTH := 10
+    BOARD_RECOVERY_CHAR_HEIGHT := 18
 endif
 LOCAL_CFLAGS += -DBOARD_RECOVERY_CHAR_WIDTH=$(BOARD_RECOVERY_CHAR_WIDTH) -DBOARD_RECOVERY_CHAR_HEIGHT=$(BOARD_RECOVERY_CHAR_HEIGHT)
 
-BOARD_RECOVERY_DEFINES := BOARD_HAS_NO_SELECT_BUTTON BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES BOARD_RECOVERY_HANDLES_MOUNT BOARD_TOUCH_RECOVERY
+BOARD_RECOVERY_DEFINES := \
+    BOARD_HAS_NO_SELECT_BUTTON BOARD_HAS_SMALL_RECOVERY BOARD_LDPI_RECOVERY \
+    BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES \
+    BOARD_RECOVERY_HANDLES_MOUNT BOARD_NEVER_UMOUNT_SYSTEM \
+    BOARD_TOUCH_RECOVERY
+
+# not enabled : WIPE_DATA_ERASE_SDEXT
 
 $(foreach board_define,$(BOARD_RECOVERY_DEFINES), \
   $(if $($(board_define)), \
     $(eval LOCAL_CFLAGS += -D$(board_define)=\"$($(board_define))\") \
   ) \
-  )
+ )
+
+LOCAL_CFLAGS += -DBUILD_TOP="$(ANDROID_BUILD_TOP)"
+
+LOCAL_CFLAGS += -DUSE_EXT4
+LOCAL_C_INCLUDES += system/extras/ext4_utils
 
 LOCAL_STATIC_LIBRARIES :=
 
@@ -68,7 +87,7 @@ LOCAL_STATIC_LIBRARIES += libext4_utils libz
 # a (redundant) copy of the binary in /system/bin for user builds.
 # TODO: Build the ramdisk image in a more principled way.
 
-LOCAL_MODULE_TAGS := eng
+LOCAL_MODULE_TAGS := eng debug
 
 ifeq ($(BOARD_CUSTOM_RECOVERY_KEYMAPPING),)
   LOCAL_SRC_FILES += default_recovery_keys.c
@@ -122,7 +141,7 @@ ALL_DEFAULT_INSTALLED_MODULES += $(RECOVERY_BUSYBOX_SYMLINKS)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := nandroid-md5.sh
-LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_TAGS := eng debug
 LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
 LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
 LOCAL_SRC_FILES := nandroid-md5.sh
@@ -130,7 +149,7 @@ include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := killrecovery.sh
-LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_TAGS := eng debug
 LOCAL_MODULE_CLASS := RECOVERY_EXECUTABLES
 LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
 LOCAL_SRC_FILES := killrecovery.sh
@@ -163,4 +182,6 @@ include $(commands_recovery_local_path)/edify/Android.mk
 include $(commands_recovery_local_path)/updater/Android.mk
 include $(commands_recovery_local_path)/applypatch/Android.mk
 include $(commands_recovery_local_path)/utilities/Android.mk
+include $(commands_recovery_local_path)/libreboot/Android.mk
 commands_recovery_local_path :=
+

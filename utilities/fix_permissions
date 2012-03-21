@@ -72,6 +72,7 @@ SYSREMOUNT=0
 SYSMOUNT=0
 DATAMOUNT=0
 SYSSDMOUNT=0
+
 FP_STARTTIME=$( $DATE +"%m-%d-%Y %H:%M:%S" )
 FP_STARTEPOCH=$( $DATE +%s )
 if $TEST "$SD_EXT_DIRECTORY" = ""; then
@@ -456,9 +457,9 @@ fp_end()
       $UMOUNT $SD_EXT_DIRECTORY > /dev/null 2>&1
    fi
    
-   if $TEST $SYSMOUNT -eq 1; then
-      $UMOUNT /system > /dev/null 2>&1
-   fi
+#  if $TEST $SYSMOUNT -eq 1; then
+#     $UMOUNT /system > /dev/null 2>&1
+#  fi
    
    if $TEST $DATAMOUNT -eq 1; then
       $UMOUNT /data > /dev/null 2>&1

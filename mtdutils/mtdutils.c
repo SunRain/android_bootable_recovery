@@ -406,6 +406,11 @@ static int write_block(MtdWriteContext *ctx, const char *data)
     if (pos == (off_t) -1) return 1;
 
     ssize_t size = partition->erase_size;
+
+    char *verify = malloc(size);
+    if (verify == NULL)
+        return 1;
+
     while (pos + size <= (int) partition->size) {
         loff_t bpos = pos;
         int ret = ioctl(fd, MEMGETBADBLOCK, &bpos);
@@ -434,7 +439,6 @@ static int write_block(MtdWriteContext *ctx, const char *data)
                         pos, strerror(errno));
             }
 
-            char verify[size];
             if (lseek(fd, pos, SEEK_SET) != pos ||
                 read(fd, verify, size) != size) {
                 fprintf(stderr, "mtd: re-read error at 0x%08lx (%s)\n",
@@ -450,7 +454,8 @@ static int write_block(MtdWriteContext *ctx, const char *data)
             if (retry > 0) {
                 fprintf(stderr, "mtd: wrote block after %d retries\n", retry);
             }
-            fprintf(stderr, "mtd: successfully wrote block at %llx\n", pos);
+            fprintf(stderr, "mtd: successfully wrote block at %08lx\n", pos);
+            free(verify);
             return 0;  // Success!
         }
 
@@ -460,6 +465,8 @@ static int write_block(MtdWriteContext *ctx, const char *data)
         ioctl(fd, MEMERASE, &erase_info);
         pos += partition->erase_size;
     }
+
+    free(verify);
 
     // Ran out of space on the device
     errno = ENOSPC;
@@ -622,8 +629,30 @@ int cmd_mtd_restore_raw_partition(const char *partition_name, const char *filena
     if (mtd_erase_blocks(ctx, -1) == -1) {
         fprintf(stderr, "error erasing blocks of %s\n", partition_name);
     }
-    if (mtd_write_close(ctx) != 0) {
-        fprintf(stderr, "error closing write of %s\n", partition_name);
+
+    int left = block_size - headerlen;
+    while (left < 0) left += block_size;
+    while (left > 0) {
+        len = read(fd, buf, left > (int)sizeof(buf) ? (int)sizeof(buf) : left);
+        if (len == 0)
+            break;
+        if (len < 0){
+            printf("error reading %s", filename);
+            return -1;
+        }
+        if (mtd_write_data(out, buf, len) != len)
+        {
+            printf("error writing %s", partition_name);
+            return -1;
+        }
+
+        left -= len;
+    }
+
+    if (mtd_write_close(out))
+    {
+        printf("error closing %s", partition_name);
+        return -1;
     }
     printf("%s %s partition\n", success ? "wrote" : "failed to write", partition_name);
     return 0;
@@ -762,7 +791,7 @@ int cmd_mtd_mount_partition(const char *partition, const char *mount_point, cons
 int cmd_mtd_get_partition_device(const char *partition, char *device)
 {
     mtd_scan_partitions();
-    MtdPartition *p = mtd_find_partition_by_name(partition);
+    MtdPartition *p = (MtdPartition *) mtd_find_partition_by_name(partition);
     if (p == NULL)
         return -1;
     sprintf(device, "/dev/block/mtdblock%d", p->device_index);

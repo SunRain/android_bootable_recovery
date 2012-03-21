@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/reboot.h>
+#include <cutils/android_reboot.h>
 
 #include "common.h"
 #include <cutils/android_reboot.h>
@@ -42,7 +44,7 @@ static int gShowBackButton = 0;
 #endif
 
 #define MAX_COLS 96
-#define MAX_ROWS 32
+#define MAX_ROWS 48
 
 #define MENU_MAX_COLS 64
 #define MENU_MAX_ROWS 250
@@ -52,7 +54,10 @@ static int gShowBackButton = 0;
 #define CHAR_WIDTH BOARD_RECOVERY_CHAR_WIDTH
 #define CHAR_HEIGHT BOARD_RECOVERY_CHAR_HEIGHT
 
-#define UI_WAIT_KEY_TIMEOUT_SEC    3600
+#define PROGRESSBAR_INDETERMINATE_STATES 6
+#define PROGRESSBAR_INDETERMINATE_FPS 15
+//#define UI_WAIT_KEY_TIMEOUT_SEC    3600 // 1h
+#define UI_WAIT_KEY_TIMEOUT_SEC      600
 
 UIParameters ui_parameters = {
     6,       // indeterminate progress bar frames
@@ -73,7 +78,7 @@ static int ui_log_stdout = 1;
 static const struct { gr_surface* surface; const char *name; } BITMAPS[] = {
     { &gBackgroundIcon[BACKGROUND_ICON_INSTALLING], "icon_installing" },
     { &gBackgroundIcon[BACKGROUND_ICON_ERROR],      "icon_error" },
-    { &gBackgroundIcon[BACKGROUND_ICON_CLOCKWORK],  "icon_clockwork" },
+    { &gBackgroundIcon[BACKGROUND_ICON_CLOCKWORK],  "icon_bootmenu" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_INSTALLING], "icon_firmware_install" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_ERROR], "icon_firmware_error" },
     { &gProgressBarEmpty,               "progress_empty" },
@@ -205,8 +210,11 @@ static void draw_text_line(int row, const char* t) {
   }
 }
 
-//#define MENU_TEXT_COLOR 255, 160, 49, 255
-#define MENU_TEXT_COLOR 0, 191, 255, 255
+//#define MENU_TEXT_COLOR 255, 160, 49, 255 //orange v3
+//#define MENU_TEXT_COLOR 0, 191, 255, 255  //cyan   v5
+//#define MENU_TEXT_COLOR 255, 1, 1, 200    //red    dev
+//#define MENU_TEXT_COLOR 7, 255, 1, 255    //lime
+#define MENU_TEXT_COLOR 64, 96, 255, 255 //blue
 #define NORMAL_TEXT_COLOR 200, 200, 200, 255
 #define HEADER_TEXT_COLOR NORMAL_TEXT_COLOR
 
@@ -266,17 +274,9 @@ static void draw_screen_locked(void)
         }
 
         gr_color(NORMAL_TEXT_COLOR);
-        int cur_row = text_row;
-        int available_rows = total_rows - row - 1;
-        int start_row = row + 1;
-        if (available_rows < MAX_ROWS)
-            cur_row = (cur_row + (MAX_ROWS - available_rows)) % MAX_ROWS;
-        else
-            start_row = total_rows - MAX_ROWS;
-
-        int r;
-        for (r = 0; r < (available_rows < MAX_ROWS ? available_rows : MAX_ROWS); r++) {
-            draw_text_line(start_row + r, text[(cur_row + r) % MAX_ROWS]);
+        row++;
+        for (; row < text_rows; ++row) {
+            draw_text_line(row, text[(row+text_top) % text_rows]);
         }
     }
 }
@@ -439,7 +439,7 @@ void ui_init(void)
 {
     ui_has_initialized = 1;
     gr_init();
-    ev_init(input_callback, NULL);
+    ev_init_compat();
 
     text_col = text_row = 0;
     text_rows = gr_fb_height() / CHAR_HEIGHT;
@@ -813,3 +813,29 @@ void ui_set_showing_back_button(int showBackButton) {
 int ui_get_showing_back_button() {
     return gShowBackButton;
 }
+
+// Return true if USB is connected.
+int usb_connected()
+{
+    //#define SYS_USB_CONNECTED "/sys/class/android_usb/android0/state"
+
+    #define SYS_USB_CONNECTED   "/sys/class/power_supply/usb/online"
+    #define SYS_POWER_CONNECTED "/sys/class/power_supply/ac/online"
+
+    int state;
+    FILE* f = fopen(SYS_USB_CONNECTED, "r");
+    if (f != NULL) {
+        fscanf(f, "%d", &state);
+        fclose(f);
+        if (state) {
+            f = fopen(SYS_POWER_CONNECTED, "r");
+            if (f != NULL) {
+                fscanf(f, "%d", &state);
+                fclose(f);
+                return (state == 0);
+            }
+        }
+    }
+    return 0;
+}
+

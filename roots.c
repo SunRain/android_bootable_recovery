@@ -23,13 +23,17 @@
 #include <ctype.h>
 
 #include "mtdutils/mtdutils.h"
+#include "flashutils/flashutils.h"
 #include "mounts.h"
 #include "roots.h"
 #include "common.h"
-#include "make_ext4fs.h"
-
-#include "flashutils/flashutils.h"
 #include "extendedcommands.h"
+
+#ifdef USE_EXT4
+#include "make_ext4fs.h"
+//ICS Correct ext4 prototype
+#define make_ext4fs(dev, a, b, c, d, e)  make_ext4fs_internal(dev, a, b, c, d, e, 0, 0, 0)
+#endif
 
 int num_volumes;
 Volume* device_volumes;
@@ -81,6 +85,7 @@ static int parse_options(char* options, Volume* volume) {
 void load_volume_table() {
     int alloc = 2;
     device_volumes = malloc(alloc * sizeof(Volume));
+    memset(&device_volumes[0], 0, alloc * sizeof(Volume));
 
     // Insert an entry for /tmp, which is the ramdisk and is always mounted.
     device_volumes[0].mount_point = "/tmp";
@@ -128,6 +133,7 @@ void load_volume_table() {
                 alloc *= 2;
                 device_volumes = realloc(device_volumes, alloc*sizeof(Volume));
             }
+            memset(&device_volumes[num_volumes], 0, sizeof(Volume));
             device_volumes[num_volumes].mount_point = strdup(mount_point);
             device_volumes[num_volumes].fs_type = strdup(fs_type);
             device_volumes[num_volumes].device = strdup(device);
@@ -244,6 +250,14 @@ int ensure_path_mounted_at_mount_point(const char* path, const char* mount_point
         find_mounted_volume_by_mount_point(mount_point);
     if (mv) {
         // volume is already mounted
+
+        #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+        if (strcmp(v->mount_point, "/system") == 0) {
+            __system("mount -o remount,rw /system");
+            //__system("echo 0 > /sys/class/leds/red/brightness");
+        }
+        #endif
+
         return 0;
     }
 
@@ -290,13 +304,24 @@ int ensure_path_unmounted(const char* path) {
         return 0;
     }
 
+    #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+    if (strcmp(path, "/system") == 0) {
+        __system("sync");
+
+    // comment to test remount rw
+    //return 0;
+    }
+    #endif
+
     Volume* v = volume_for_path(path);
     if (v == NULL) {
         // no /sdcard? let's assume /data/media
         if (strstr(path, "/sdcard") == path && is_data_media()) {
             return ensure_path_unmounted("/data");
         }
-        LOGE("unknown volume for path [%s]\n", path);
+        if (strcmp(path, "/sd-ext") == 0) {
+           LOGE("unknown volume for path [%s]\n", path);
+        }
         return -1;
     }
     if (strcmp(v->fs_type, "ramdisk") == 0) {
@@ -352,6 +377,24 @@ int format_volume(const char* volume) {
         return format_unknown_device(v->device, volume, NULL);
     }
 
+    // force the "rm -rf" method
+    int rmrf_format=0;
+
+    #ifdef NEVER_FORMAT_PARTITIONS
+    rmrf_format=1;
+    #endif
+
+    #ifdef BOARD_NEVER_UMOUNT_SYSTEM
+    if (strcmp(v->mount_point, "/system") == 0) {
+        rmrf_format=1;
+    }
+    #endif
+
+    if (rmrf_format) {
+        // use directly the "rm -rf" method
+        return format_unknown_device(v->device, volume, v->fs_type);
+    }
+
     if (ensure_path_unmounted(volume) != 0) {
         LOGE("format_volume failed to unmount \"%s\"\n", v->mount_point);
         return -1;
@@ -380,6 +423,7 @@ int format_volume(const char* volume) {
         return 0;
     }
 
+#ifdef USE_EXT4
     if (strcmp(v->fs_type, "ext4") == 0) {
         int result = make_ext4fs(v->device, v->length);
         if (result != 0) {
@@ -388,9 +432,10 @@ int format_volume(const char* volume) {
         }
         return 0;
     }
+#endif
 
 #if 0
-    LOGE("format_volume: fs_type \"%s\" unsupported\n", v->fs_type);
+    LOGW("format_volume: fs_type \"%s\" unsupported\n", v->fs_type);
     return -1;
 #endif
     return format_unknown_device(v->device, volume, v->fs_type);

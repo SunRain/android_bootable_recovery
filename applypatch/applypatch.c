@@ -30,7 +30,6 @@
 #include "mtdutils/mtdutils.h"
 #include "edify/expr.h"
 
-int SaveFileContents(const char* filename, FileContents file);
 static int LoadPartitionContents(const char* filename, FileContents* file);
 int ParseSha1(const char* str, uint8_t* digest);
 static ssize_t FileSink(unsigned char* data, ssize_t len, void* token);
@@ -43,8 +42,7 @@ static int mtd_partitions_scanned = 0;
 // metadata in *file.
 //
 // Return 0 on success.
-int LoadFileContents(const char* filename, FileContents* file,
-                     int retouch_flag) {
+int LoadFileContents(const char* filename, FileContents* file, int retouch_flag) {
     file->data = NULL;
 
     // A special 'filename' beginning with "MTD:" or "EMMC:" means to
@@ -112,6 +110,7 @@ static int compare_size_indices(const void* a, const void* b) {
         return 0;
     }
 }
+
 
 void FreeFileContents(FileContents* file) {
     if (file) free(file->data);
@@ -636,8 +635,7 @@ int applypatch(const char* source_filename,
     int made_copy = 0;
 
     // We try to load the target file into the source_file object.
-    if (LoadFileContents(target_filename, &source_file,
-                         RETOUCH_DO_MASK) == 0) {
+    if (LoadFileContents(target_filename, &source_file, RETOUCH_DO_MASK) == 0) {
         if (memcmp(source_file.sha1, target_sha1, SHA_DIGEST_SIZE) == 0) {
             // The early-exit case:  the patch was already applied, this file
             // has the desired hash, nothing for us to do.
@@ -653,8 +651,7 @@ int applypatch(const char* source_filename,
         // Need to load the source file:  either we failed to load the
         // target file, or we did but it's different from the source file.
         free(source_file.data);
-        LoadFileContents(source_filename, &source_file,
-                         RETOUCH_DO_MASK);
+        LoadFileContents(source_filename, &source_file, RETOUCH_DO_MASK);
     }
 
     if (source_file.data != NULL) {
@@ -669,8 +666,7 @@ int applypatch(const char* source_filename,
         free(source_file.data);
         printf("source file is bad; trying copy\n");
 
-        if (LoadFileContents(CACHE_TEMP_SOURCE, &copy_file,
-                             RETOUCH_DO_MASK) < 0) {
+        if (LoadFileContents(CACHE_TEMP_SOURCE, &copy_file, RETOUCH_DO_MASK) < 0) {
             // fail.
             printf("failed to read copy file\n");
             return 1;
