@@ -31,7 +31,6 @@
 #include <cutils/android_reboot.h>
 
 #include "common.h"
-#include <cutils/android_reboot.h>
 #include "minui/minui.h"
 #include "recovery_ui.h"
 
@@ -68,8 +67,7 @@ UIParameters ui_parameters = {
 
 static pthread_mutex_t gUpdateMutex = PTHREAD_MUTEX_INITIALIZER;
 static gr_surface gBackgroundIcon[NUM_BACKGROUND_ICONS];
-static gr_surface *gInstallationOverlay;
-static gr_surface *gProgressBarIndeterminate;
+static gr_surface gProgressBarIndeterminate[PROGRESSBAR_INDETERMINATE_STATES];
 static gr_surface gProgressBarEmpty;
 static gr_surface gProgressBarFill;
 static int ui_has_initialized = 0;
@@ -81,13 +79,18 @@ static const struct { gr_surface* surface; const char *name; } BITMAPS[] = {
     { &gBackgroundIcon[BACKGROUND_ICON_CLOCKWORK],  "icon_bootmenu" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_INSTALLING], "icon_firmware_install" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_ERROR], "icon_firmware_error" },
+    { &gProgressBarIndeterminate[0],    "indeterminate1" },
+    { &gProgressBarIndeterminate[1],    "indeterminate2" },
+    { &gProgressBarIndeterminate[2],    "indeterminate3" },
+    { &gProgressBarIndeterminate[3],    "indeterminate4" },
+    { &gProgressBarIndeterminate[4],    "indeterminate5" },
+    { &gProgressBarIndeterminate[5],    "indeterminate6" },
     { &gProgressBarEmpty,               "progress_empty" },
     { &gProgressBarFill,                "progress_fill" },
     { NULL,                             NULL },
 };
 
-static int gCurrentIcon = 0;
-static int gInstallingFrame = 0;
+static gr_surface gCurrentIcon = NULL;
 
 static enum ProgressBarType {
     PROGRESSBAR_TYPE_NONE,
@@ -97,7 +100,7 @@ static enum ProgressBarType {
 
 // Progress bar scope of current operation
 static float gProgressScopeStart = 0, gProgressScopeSize = 0, gProgress = 0;
-static double gProgressScopeTime, gProgressScopeDuration;
+static time_t gProgressScopeTime, gProgressScopeDuration;
 
 // Set to 1 when both graphics pages are the same (except for the progress bar)
 static int gPagesIdentical = 0;
@@ -113,7 +116,6 @@ static char menu[MENU_MAX_ROWS][MENU_MAX_COLS];
 static int show_menu = 0;
 static int menu_top = 0, menu_items = 0, menu_sel = 0;
 static int menu_show_start = 0;             // this is line which menu display is starting at
-static int max_menu_rows;
 
 // Key event input queue
 static pthread_mutex_t key_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -121,46 +123,20 @@ static pthread_cond_t key_queue_cond = PTHREAD_COND_INITIALIZER;
 static int key_queue[256], key_queue_len = 0;
 static volatile char key_pressed[KEY_MAX + 1];
 
-// Return the current time as a double (including fractions of a second).
-static double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return tv.tv_sec + tv.tv_usec / 1000000.0;
-}
-
-// Draw the given frame over the installation overlay animation.  The
-// background is not cleared or draw with the base icon first; we
-// assume that the frame already contains some other frame of the
-// animation.  Does nothing if no overlay animation is defined.
-// Should only be called with gUpdateMutex locked.
-static void draw_install_overlay_locked(int frame) {
-    if (gInstallationOverlay == NULL) return;
-    gr_surface surface = gInstallationOverlay[frame];
-    int iconWidth = gr_get_width(surface);
-    int iconHeight = gr_get_height(surface);
-    gr_blit(surface, 0, 0, iconWidth, iconHeight,
-            ui_parameters.install_overlay_offset_x,
-            ui_parameters.install_overlay_offset_y);
-}
-
 // Clear the screen and draw the currently selected background icon (if any).
 // Should only be called with gUpdateMutex locked.
-static void draw_background_locked(int icon)
+static void draw_background_locked(gr_surface icon)
 {
     gPagesIdentical = 0;
     gr_color(0, 0, 0, 255);
     gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
     if (icon) {
-        gr_surface surface = gBackgroundIcon[icon];
-        int iconWidth = gr_get_width(surface);
-        int iconHeight = gr_get_height(surface);
+        int iconWidth = gr_get_width(icon);
+        int iconHeight = gr_get_height(icon);
         int iconX = (gr_fb_width() - iconWidth) / 2;
         int iconY = (gr_fb_height() - iconHeight) / 2;
-        gr_blit(surface, 0, 0, iconWidth, iconHeight, iconX, iconY);
-        if (icon == BACKGROUND_ICON_INSTALLING) {
-            draw_install_overlay_locked(gInstallingFrame);
-        }
+        gr_blit(icon, 0, 0, iconWidth, iconHeight, iconX, iconY);
     }
 }
 
@@ -168,39 +144,35 @@ static void draw_background_locked(int icon)
 // Should only be called with gUpdateMutex locked.
 static void draw_progress_locked()
 {
-    if (gCurrentIcon == BACKGROUND_ICON_INSTALLING) {
-        draw_install_overlay_locked(gInstallingFrame);
+    if (gProgressBarType == PROGRESSBAR_TYPE_NONE) return;
+
+    int iconHeight = gr_get_height(gBackgroundIcon[BACKGROUND_ICON_INSTALLING]);
+    int width = gr_get_width(gProgressBarEmpty);
+    int height = gr_get_height(gProgressBarEmpty);
+
+    int dx = (gr_fb_width() - width)/2;
+    int dy = (3*gr_fb_height() + iconHeight - 2*height)/4;
+
+    // Erase behind the progress bar (in case this was a progress-only update)
+    gr_color(0, 0, 0, 255);
+    gr_fill(dx, dy, width, height);
+
+    if (gProgressBarType == PROGRESSBAR_TYPE_NORMAL) {
+        float progress = gProgressScopeStart + gProgress * gProgressScopeSize;
+        int pos = (int) (progress * width);
+
+        if (pos > 0) {
+          gr_blit(gProgressBarFill, 0, 0, pos, height, dx, dy);
+        }
+        if (pos < width-1) {
+          gr_blit(gProgressBarEmpty, pos, 0, width-pos, height, dx+pos, dy);
+        }
     }
 
-    if (gProgressBarType != PROGRESSBAR_TYPE_NONE) {
-        int iconHeight = gr_get_height(gBackgroundIcon[BACKGROUND_ICON_INSTALLING]);
-        int width = gr_get_width(gProgressBarEmpty);
-        int height = gr_get_height(gProgressBarEmpty);
-
-        int dx = (gr_fb_width() - width)/2;
-        int dy = (3*gr_fb_height() + iconHeight - 2*height)/4;
-
-        // Erase behind the progress bar (in case this was a progress-only update)
-        gr_color(0, 0, 0, 255);
-        gr_fill(dx, dy, width, height);
-
-        if (gProgressBarType == PROGRESSBAR_TYPE_NORMAL) {
-            float progress = gProgressScopeStart + gProgress * gProgressScopeSize;
-            int pos = (int) (progress * width);
-
-            if (pos > 0) {
-                gr_blit(gProgressBarFill, 0, 0, pos, height, dx, dy);
-            }
-            if (pos < width-1) {
-                gr_blit(gProgressBarEmpty, pos, 0, width-pos, height, dx+pos, dy);
-            }
-        }
-
-        if (gProgressBarType == PROGRESSBAR_TYPE_INDETERMINATE) {
-            static int frame = 0;
-            gr_blit(gProgressBarIndeterminate[frame], 0, 0, width, height, dx, dy);
-            frame = (frame + 1) % ui_parameters.indeterminate_frames;
-        }
+    if (gProgressBarType == PROGRESSBAR_TYPE_INDETERMINATE) {
+        static int frame = 0;
+        gr_blit(gProgressBarIndeterminate[frame], 0, 0, width, height, dx, dy);
+        frame = (frame + 1) % PROGRESSBAR_INDETERMINATE_STATES;
     }
 }
 
@@ -230,10 +202,8 @@ static void draw_screen_locked(void)
         gr_color(0, 0, 0, 160);
         gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
-        int total_rows = gr_fb_height() / CHAR_HEIGHT;
         int i = 0;
         int j = 0;
-        int offset = 0;         // offset of separating bar under menus
         int row = 0;            // current row that we are drawing on
         if (show_menu) {
             gr_color(MENU_TEXT_COLOR);
@@ -246,8 +216,8 @@ static void draw_screen_locked(void)
                 row++;
             }
 
-            if (menu_items - menu_show_start + menu_top >= max_menu_rows)
-                j = max_menu_rows - menu_top;
+            if (menu_items - menu_show_start + menu_top >= MAX_ROWS)
+                j = MAX_ROWS - menu_top;
             else
                 j = menu_items - menu_show_start;
 
@@ -262,15 +232,9 @@ static void draw_screen_locked(void)
                     draw_text_line(i - menu_show_start, menu[i]);
                 }
                 row++;
-                if (row >= max_menu_rows)
-                    break;
             }
-
-            if (menu_items <= max_menu_rows)
-                offset = 1;
-
-            gr_fill(0, (row-offset)*CHAR_HEIGHT+CHAR_HEIGHT/2-1,
-                    gr_fb_width(), (row-offset)*CHAR_HEIGHT+CHAR_HEIGHT/2+1);
+            gr_fill(0, row*CHAR_HEIGHT+CHAR_HEIGHT/2-1,
+                    gr_fb_width(), row*CHAR_HEIGHT+CHAR_HEIGHT/2+1);
         }
 
         gr_color(NORMAL_TEXT_COLOR);
@@ -299,7 +263,7 @@ static void update_progress_locked(void)
         draw_screen_locked();    // Must redraw the whole screen
         gPagesIdentical = 1;
     } else {
-        draw_progress_locked();  // Draw only the progress bar and overlays
+        draw_progress_locked();  // Draw only the progress bar
     }
     gr_flip();
 }
@@ -307,130 +271,97 @@ static void update_progress_locked(void)
 // Keeps the progress bar updated, even when the process is otherwise busy.
 static void *progress_thread(void *cookie)
 {
-    double interval = 1.0 / ui_parameters.update_fps;
     for (;;) {
-        double start = now();
+        usleep(1000000 / PROGRESSBAR_INDETERMINATE_FPS);
         pthread_mutex_lock(&gUpdateMutex);
-
-        int redraw = 0;
-
-        // update the installation animation, if active
-        // skip this if we have a text overlay (too expensive to update)
-        if (gCurrentIcon == BACKGROUND_ICON_INSTALLING &&
-            ui_parameters.installing_frames > 0 &&
-            !show_text) {
-            gInstallingFrame =
-                (gInstallingFrame + 1) % ui_parameters.installing_frames;
-            redraw = 1;
-        }
 
         // update the progress bar animation, if active
         // skip this if we have a text overlay (too expensive to update)
         if (gProgressBarType == PROGRESSBAR_TYPE_INDETERMINATE && !show_text) {
-            redraw = 1;
+            update_progress_locked();
         }
 
         // move the progress bar forward on timed intervals, if configured
         int duration = gProgressScopeDuration;
         if (gProgressBarType == PROGRESSBAR_TYPE_NORMAL && duration > 0) {
-            double elapsed = now() - gProgressScopeTime;
+            int elapsed = time(NULL) - gProgressScopeTime;
             float progress = 1.0 * elapsed / duration;
             if (progress > 1.0) progress = 1.0;
             if (progress > gProgress) {
                 gProgress = progress;
-                redraw = 1;
+                update_progress_locked();
             }
         }
 
-        if (redraw) update_progress_locked();
-
         pthread_mutex_unlock(&gUpdateMutex);
-        double end = now();
-        // minimum of 20ms delay between frames
-        double delay = interval - (end-start);
-        if (delay < 0.02) delay = 0.02;
-        usleep((long)(delay * 1000000));
     }
     return NULL;
-}
-
-static int rel_sum = 0;
-
-static int input_callback(int fd, short revents, void *data)
-{
-    struct input_event ev;
-    int ret;
-    int fake_key = 0;
-
-    ret = ev_get_input(fd, revents, &ev);
-    if (ret)
-        return -1;
-
-    if (ev.type == EV_SYN) {
-        return 0;
-    } else if (ev.type == EV_REL) {
-        if (ev.code == REL_Y) {
-            // accumulate the up or down motion reported by
-            // the trackball.  When it exceeds a threshold
-            // (positive or negative), fake an up/down
-            // key event.
-            rel_sum += ev.value;
-            if (rel_sum > 3) {
-                fake_key = 1;
-                ev.type = EV_KEY;
-                ev.code = KEY_DOWN;
-                ev.value = 1;
-                rel_sum = 0;
-            } else if (rel_sum < -3) {
-                fake_key = 1;
-                ev.type = EV_KEY;
-                ev.code = KEY_UP;
-                ev.value = 1;
-                rel_sum = 0;
-            }
-        }
-    } else {
-        rel_sum = 0;
-    }
-
-    if (ev.type != EV_KEY || ev.code > KEY_MAX)
-        return 0;
-
-    pthread_mutex_lock(&key_queue_mutex);
-    if (!fake_key) {
-        // our "fake" keys only report a key-down event (no
-        // key-up), so don't record them in the key_pressed
-        // table.
-        key_pressed[ev.code] = ev.value;
-    }
-    const int queue_max = sizeof(key_queue) / sizeof(key_queue[0]);
-    if (ev.value > 0 && key_queue_len < queue_max) {
-        key_queue[key_queue_len++] = ev.code;
-        pthread_cond_signal(&key_queue_cond);
-    }
-    pthread_mutex_unlock(&key_queue_mutex);
-
-    if (ev.value > 0 && device_toggle_display(key_pressed, ev.code)) {
-        pthread_mutex_lock(&gUpdateMutex);
-        show_text = !show_text;
-        if (show_text) show_text_ever = 1;
-        update_screen_locked();
-        pthread_mutex_unlock(&gUpdateMutex);
-    }
-
-    if (ev.value > 0 && device_reboot_now(key_pressed, ev.code)) {
-        android_reboot(ANDROID_RB_RESTART, 0, 0);
-    }
-
-    return 0;
 }
 
 // Reads input events, handles special hot keys, and adds to the key queue.
 static void *input_thread(void *cookie)
 {
+    int rel_sum = 0;
+    int fake_key = 0;
     for (;;) {
-        if (!ev_wait(-1))
-            ev_dispatch();
+        // wait for the next key event
+        struct input_event ev;
+        do {
+            ev_get(&ev, 0);
+
+            if (ev.type == EV_SYN) {
+                continue;
+            } else if (ev.type == EV_REL) {
+                if (ev.code == REL_Y) {
+                    // accumulate the up or down motion reported by
+                    // the trackball.  When it exceeds a threshold
+                    // (positive or negative), fake an up/down
+                    // key event.
+                    rel_sum += ev.value;
+                    if (rel_sum > 3) {
+                        fake_key = 1;
+                        ev.type = EV_KEY;
+                        ev.code = KEY_DOWN;
+                        ev.value = 1;
+                        rel_sum = 0;
+                    } else if (rel_sum < -3) {
+                        fake_key = 1;
+                        ev.type = EV_KEY;
+                        ev.code = KEY_UP;
+                        ev.value = 1;
+                        rel_sum = 0;
+                    }
+                }
+            } else {
+                rel_sum = 0;
+            }
+        } while (ev.type != EV_KEY || ev.code > KEY_MAX);
+
+        pthread_mutex_lock(&key_queue_mutex);
+        if (!fake_key) {
+            // our "fake" keys only report a key-down event (no
+            // key-up), so don't record them in the key_pressed
+            // table.
+            key_pressed[ev.code] = ev.value;
+        }
+        fake_key = 0;
+        const int queue_max = sizeof(key_queue) / sizeof(key_queue[0]);
+        if (ev.value > 0 && key_queue_len < queue_max) {
+            key_queue[key_queue_len++] = ev.code;
+            pthread_cond_signal(&key_queue_cond);
+        }
+        pthread_mutex_unlock(&key_queue_mutex);
+
+        if (ev.value > 0 && device_toggle_display(key_pressed, ev.code)) {
+            pthread_mutex_lock(&gUpdateMutex);
+            show_text = !show_text;
+            update_screen_locked();
+            pthread_mutex_unlock(&gUpdateMutex);
+        }
+
+        if (ev.value > 0 && device_reboot_now(key_pressed, ev.code)) {
+            reboot(RB_AUTOBOOT);
+        }
     }
     return NULL;
 }
@@ -443,9 +374,6 @@ void ui_init(void)
 
     text_col = text_row = 0;
     text_rows = gr_fb_height() / CHAR_HEIGHT;
-    max_menu_rows = text_rows - MIN_LOG_ROWS;
-    if (max_menu_rows > MENU_MAX_ROWS)
-        max_menu_rows = MENU_MAX_ROWS;
     if (text_rows > MAX_ROWS) text_rows = MAX_ROWS;
     text_top = 1;
 
@@ -456,47 +384,13 @@ void ui_init(void)
     for (i = 0; BITMAPS[i].name != NULL; ++i) {
         int result = res_create_surface(BITMAPS[i].name, BITMAPS[i].surface);
         if (result < 0) {
-            LOGE("Missing bitmap %s\n(Code %d)\n", BITMAPS[i].name, result);
-        }
-    }
-
-    gProgressBarIndeterminate = malloc(ui_parameters.indeterminate_frames *
-                                       sizeof(gr_surface));
-    for (i = 0; i < ui_parameters.indeterminate_frames; ++i) {
-        char filename[40];
-        // "indeterminate01.png", "indeterminate02.png", ...
-        sprintf(filename, "indeterminate%02d", i+1);
-        int result = res_create_surface(filename, gProgressBarIndeterminate+i);
-        if (result < 0) {
-            LOGE("Missing bitmap %s\n(Code %d)\n", filename, result);
-        }
-    }
-
-    if (ui_parameters.installing_frames > 0) {
-        gInstallationOverlay = malloc(ui_parameters.installing_frames *
-                                      sizeof(gr_surface));
-        for (i = 0; i < ui_parameters.installing_frames; ++i) {
-            char filename[40];
-            // "icon_installing_overlay01.png",
-            // "icon_installing_overlay02.png", ...
-            sprintf(filename, "icon_installing_overlay%02d", i+1);
-            int result = res_create_surface(filename, gInstallationOverlay+i);
-            if (result < 0) {
-                LOGE("Missing bitmap %s\n(Code %d)\n", filename, result);
+            if (result == -2) {
+                LOGI("Bitmap %s missing header\n", BITMAPS[i].name);
+            } else {
+                LOGE("Missing bitmap %s\n(Code %d)\n", BITMAPS[i].name, result);
             }
+            *BITMAPS[i].surface = NULL;
         }
-
-        // Adjust the offset to account for the positioning of the
-        // base image on the screen.
-        if (gBackgroundIcon[BACKGROUND_ICON_INSTALLING] != NULL) {
-            gr_surface bg = gBackgroundIcon[BACKGROUND_ICON_INSTALLING];
-            ui_parameters.install_overlay_offset_x +=
-                (gr_fb_width() - gr_get_width(bg)) / 2;
-            ui_parameters.install_overlay_offset_y +=
-                (gr_fb_height() - gr_get_height(bg)) / 2;
-        }
-    } else {
-        gInstallationOverlay = NULL;
     }
 
     pthread_t t;
@@ -524,7 +418,7 @@ char *ui_copy_image(int icon, int *width, int *height, int *bpp) {
 void ui_set_background(int icon)
 {
     pthread_mutex_lock(&gUpdateMutex);
-    gCurrentIcon = icon;
+    gCurrentIcon = gBackgroundIcon[icon];
     update_screen_locked();
     pthread_mutex_unlock(&gUpdateMutex);
 }
@@ -545,7 +439,7 @@ void ui_show_progress(float portion, int seconds)
     gProgressBarType = PROGRESSBAR_TYPE_NORMAL;
     gProgressScopeStart += gProgressScopeSize;
     gProgressScopeSize = portion;
-    gProgressScopeTime = now();
+    gProgressScopeTime = time(NULL);
     gProgressScopeDuration = seconds;
     gProgress = 0;
     update_progress_locked();
@@ -655,17 +549,14 @@ int ui_start_menu(char** headers, char** items, int initial_selection) {
         for (; i < MENU_MAX_ROWS; ++i) {
             if (items[i-menu_top] == NULL) break;
             strcpy(menu[i], MENU_ITEM_HEADER);
-            strncpy(menu[i] + MENU_ITEM_HEADER_LENGTH, items[i-menu_top], MENU_MAX_COLS - 1 - MENU_ITEM_HEADER_LENGTH);
-            menu[i][MENU_MAX_COLS-1] = '\0';
+            strncpy(menu[i] + MENU_ITEM_HEADER_LENGTH, items[i-menu_top], text_cols-1 - MENU_ITEM_HEADER_LENGTH);
+            menu[i][text_cols-1] = '\0';
         }
 
-        if (gShowBackButton && ui_menu_level > 0) {
+        if (gShowBackButton) {
             strcpy(menu[i], " - +++++Go Back+++++");
             ++i;
         }
-        
-        strcpy(menu[i], " ");
-        ++i;
 
         menu_items = i - menu_top;
         show_menu = 1;
@@ -673,7 +564,7 @@ int ui_start_menu(char** headers, char** items, int initial_selection) {
         update_screen_locked();
     }
     pthread_mutex_unlock(&gUpdateMutex);
-    if (gShowBackButton && ui_menu_level > 0) {
+    if (gShowBackButton) {
         return menu_items - 1;
     }
     return menu_items;
@@ -686,16 +577,16 @@ int ui_menu_select(int sel) {
         old_sel = menu_sel;
         menu_sel = sel;
 
-        if (menu_sel < 0) menu_sel = menu_items-1 + menu_sel;
-        if (menu_sel >= menu_items-1) menu_sel = menu_sel - menu_items+1;
+        if (menu_sel < 0) menu_sel = menu_items + menu_sel;
+        if (menu_sel >= menu_items) menu_sel = menu_sel - menu_items;
 
 
         if (menu_sel < menu_show_start && menu_show_start > 0) {
             menu_show_start = menu_sel;
         }
 
-        if (menu_sel - menu_show_start + menu_top >= max_menu_rows) {
-            menu_show_start = menu_sel + menu_top - max_menu_rows + 1;
+        if (menu_sel - menu_show_start + menu_top >= text_rows) {
+            menu_show_start = menu_sel + menu_top - text_rows + 1;
         }
 
         sel = menu_sel;
@@ -741,51 +632,15 @@ void ui_show_text(int visible)
     pthread_mutex_unlock(&gUpdateMutex);
 }
 
-// Return true if USB is connected.
-static int usb_connected() {
-    int fd = open("/sys/class/android_usb/android0/state", O_RDONLY);
-    if (fd < 0) {
-        printf("failed to open /sys/class/android_usb/android0/state: %s\n",
-               strerror(errno));
-        return 0;
-    }
-
-    char buf;
-    /* USB is connected if android_usb state is CONNECTED or CONFIGURED */
-    int connected = (read(fd, &buf, 1) == 1) && (buf == 'C');
-    if (close(fd) < 0) {
-        printf("failed to close /sys/class/android_usb/android0/state: %s\n",
-               strerror(errno));
-    }
-    return connected;
-}
-
 int ui_wait_key()
 {
     pthread_mutex_lock(&key_queue_mutex);
-
-    // Time out after UI_WAIT_KEY_TIMEOUT_SEC, unless a USB cable is
-    // plugged in.
-    do {
-        struct timeval now;
-        struct timespec timeout;
-        gettimeofday(&now, NULL);
-        timeout.tv_sec = now.tv_sec;
-        timeout.tv_nsec = now.tv_usec * 1000;
-        timeout.tv_sec += UI_WAIT_KEY_TIMEOUT_SEC;
-
-        int rc = 0;
-        while (key_queue_len == 0 && rc != ETIMEDOUT) {
-            rc = pthread_cond_timedwait(&key_queue_cond, &key_queue_mutex,
-                                        &timeout);
-        }
-    } while (usb_connected() && key_queue_len == 0);
-
-    int key = -1;
-    if (key_queue_len > 0) {
-        key = key_queue[0];
-        memcpy(&key_queue[0], &key_queue[1], sizeof(int) * --key_queue_len);
+    while (key_queue_len == 0) {
+        pthread_cond_wait(&key_queue_cond, &key_queue_mutex);
     }
+
+    int key = key_queue[0];
+    memcpy(&key_queue[0], &key_queue[1], sizeof(int) * --key_queue_len);
     pthread_mutex_unlock(&key_queue_mutex);
     return key;
 }

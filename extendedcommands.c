@@ -25,7 +25,6 @@
 #include "cutils/properties.h"
 #include "firmware.h"
 #include "install.h"
-#include "make_ext4fs.h"
 #include "minui/minui.h"
 #include "minzip/DirUtil.h"
 #include "roots.h"
@@ -39,7 +38,6 @@
 #include "mtdutils/mtdutils.h"
 #include "mmcutils/mmcutils.h"
 #include "bmlutils/bmlutils.h"
-#include "cutils/android_reboot.h"
 
 //#include EXPAND(BUILD_TOP/external/yaffs2/yaffs2/utils/unyaffs.h)
 #include "yaffs2.h"
@@ -473,9 +471,6 @@ int format_device(const char *device, const char *path, const char *fs_type) {
         LOGE("unknown volume \"%s\"\n", path);
         return -1;
     }
-    if (strstr(path, "/data") == path && volume_for_path("/sdcard") == NULL && is_data_media()) {
-        return format_unknown_device(NULL, path, NULL);
-    }
     if (strcmp(fs_type, "ramdisk") == 0) {
         // you can't format the ramdisk.
         LOGE("can't format_volume \"%s\"", path);
@@ -528,13 +523,8 @@ int format_device(const char *device, const char *path, const char *fs_type) {
 
 #ifdef USE_EXT4
     if (strcmp(fs_type, "ext4") == 0) {
-        int length = 0;
-        if (strcmp(v->fs_type, "ext4") == 0) {
-            // Our desired filesystem matches the one in fstab, respect v->length
-            length = v->length;
-        }
         reset_ext4fs_info();
-        int result = make_ext4fs(device, length);
+        int result = make_ext4fs(device, NULL, NULL, 0, 0, 0);
         if (result != 0) {
             LOGE("format_volume: make_extf4fs failed on %s\n", device);
             return -1;
@@ -758,7 +748,8 @@ void show_partition_menu()
         int chosen_item = get_menu_selection((char**) headers, (char**) &options, 0, 0);
         if (chosen_item == GO_BACK)
             break;
-        if (chosen_item == (mountable_volumes+formatable_volumes)) {
+        if (chosen_item == (mountable_volumes+formatable_volumes))
+        {
             show_mount_usb_storage_menu();
         }
         else if (chosen_item < mountable_volumes)
@@ -807,6 +798,7 @@ void show_partition_menu()
 
     free(mount_menue);
     free(format_menue);
+
 }
 
 void show_nandroid_advanced_backup_menu(const char* backup_path)
@@ -1200,7 +1192,7 @@ void show_advanced_menu()
         {
             case 0:
             {
-                android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+                reboot_wrapper("recovery");
                 break;
             }
             case 1:

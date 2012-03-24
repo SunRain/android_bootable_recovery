@@ -128,6 +128,7 @@ typedef struct {
     const char* fs_options2;
 } Volume;
 
+
 typedef struct {
     // number of frames in indeterminate progress bar animation
     int indeterminate_frames;

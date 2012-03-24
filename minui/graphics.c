@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -48,17 +47,6 @@
 #endif
 
 #include "minui.h"
-
-#if defined(RECOVERY_BGRA)
-#define PIXEL_FORMAT GGL_PIXEL_FORMAT_BGRA_8888
-#define PIXEL_SIZE   4
-#elif defined(RECOVERY_RGBX)
-#define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGBX_8888
-#define PIXEL_SIZE   4
-#else
-#define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGB_565
-#define PIXEL_SIZE   2
-#endif
 
 typedef struct {
     GGLSurface texture;
@@ -167,21 +155,12 @@ static int get_framebuffer(GGLSurface *fb)
 }
 
 static void get_memory_surface(GGLSurface* ms) {
-<<<<<<< HEAD
-  ms->version = sizeof(*ms);
-  ms->width = vi.xres;
-  ms->height = vi.yres;
-  ms->stride = fi.line_length/PIXEL_SIZE;
-  ms->data = malloc(fi.line_length * vi.yres);
-  ms->format = PIXEL_FORMAT;
-=======
     ms->version = sizeof(*ms);
     ms->width = vi.xres;
     ms->height = vi.yres;
     ms->stride = fi.line_length/PIXEL_SIZE;
     ms->data = malloc(vi.yres * fi.line_length);
     ms->format = PIXEL_FORMAT;
->>>>>>> tp/ics
 }
 
 static void set_active_framebuffer(unsigned n)

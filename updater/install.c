@@ -803,41 +803,33 @@ static bool write_raw_image_cb(const unsigned char* data,
     return false;
 }
 
-// write_raw_image(filename_or_blob, partition)
+// write_raw_image(file, partition)
 Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     char* result = NULL;
 
-    Value* partition_value;
-    Value* contents;
-    if (ReadValueArgs(state, argv, 2, &contents, &partition_value) < 0) {
+    char* partition;
+    char* filename;
+    if (ReadArgs(state, argv, 2, &filename, &partition) < 0) {
         return NULL;
     }
 
-    if (partition_value->type != VAL_STRING) {
-        ErrorAbort(state, "partition argument to %s must be string", name);
-        goto done;
-    }
-    char* partition = partition_value->data;
     if (strlen(partition) == 0) {
         ErrorAbort(state, "partition argument to %s can't be empty", name);
         goto done;
     }
-    if (contents->type == VAL_STRING && strlen((char*) contents->data) == 0) {
+    if (strlen(filename) == 0) {
         ErrorAbort(state, "file argument to %s can't be empty", name);
         goto done;
     }
 
-    char* filename = contents->data;
     if (0 == restore_raw_partition(NULL, partition, filename))
         result = strdup(partition);
-    else {
+    else
         result = strdup("");
-        goto done;
-    }
 
 done:
-    if (result != partition) FreeValue(partition_value);
-    FreeValue(contents);
+    if (result != partition) free(partition);
+    free(filename);
     return StringValue(result);
 }
 

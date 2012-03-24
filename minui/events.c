@@ -19,8 +19,11 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/poll.h>
+#include <limits.h>
 
 #include <linux/input.h>
+
+#include "../common.h"
 
 #include "minui.h"
 
@@ -33,8 +36,10 @@
 #define test_bit(bit, array) \
     ((array)[(bit)/BITS_PER_LONG] & (1 << ((bit) % BITS_PER_LONG)))
 
-#define BITS_PER_LONG (sizeof(unsigned long) * 8)
-#define BITS_TO_LONGS(x) (((x) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+#define VIBRATOR_TIMEOUT_FILE	"/sys/class/timed_output/vibrator/enable"
+#define VIBRATOR_TIME_MS	50
+
+#define PRESS_THRESHHOLD    10
 
 #define ABS_MT_POSITION_X 0x35
 #define ABS_MT_POSITION_Y 0x36
@@ -51,13 +56,21 @@ struct virtualkey {
     int width, height;
 };
 
-struct fd_info {
-    ev_callback cb;
-    void *data;
+struct position {
+    int x, y;
+    int pressed;
+    struct input_absinfo xi, yi;
 };
 
-static struct pollfd ev_fds[MAX_DEVICES + MAX_MISC_FDS];
-static struct fd_info ev_fdinfo[MAX_DEVICES + MAX_MISC_FDS];
+struct ev {
+    struct pollfd *fd;
+
+    struct virtualkey *vks;
+    int vk_count;
+
+    struct position p, mt_p;
+    int sent, mt_idx;
+};
 
 struct fd_info {
     ev_callback cb;
@@ -267,8 +280,12 @@ int ev_add_fd(int fd, ev_callback cb, void *data)
 
 void ev_exit(void)
 {
-    while (ev_count > 0) {
-        close(ev_fds[--ev_count].fd);
+    while (ev_count-- > 0) {
+	if (evs[ev_count].vk_count) {
+		free(evs[ev_count].vks);
+		evs[ev_count].vk_count = 0;
+	}
+        close(ev_fds[ev_count].fd);
     }
     ev_misc_count = 0;
     ev_dev_count = 0;
@@ -334,67 +351,147 @@ int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data)
     return 0;
 }
 
-int ev_wait(int timeout)
+static int vk_inside_display(__s32 value, struct input_absinfo *info, int screen_size)
 {
-    int r;
+    int screen_pos;
 
-    r = poll(ev_fds, ev_count, timeout);
-    if (r <= 0)
-        return -1;
-    return 0;
+    if (info->minimum == info->maximum)
+        return 0;
+
+    screen_pos = (value - info->minimum) * (screen_size - 1) / (info->maximum - info->minimum);
+    return (screen_pos >= 0 && screen_pos < screen_size);
 }
 
-void ev_dispatch(void)
+static int vk_tp_to_screen(struct position *p, int *x, int *y)
 {
-    unsigned n;
-    int ret;
+    if (p->xi.minimum == p->xi.maximum || p->yi.minimum == p->yi.maximum)
+        return 0;
 
-    for (n = 0; n < ev_count; n++) {
-        ev_callback cb = ev_fdinfo[n].cb;
-        if (cb && (ev_fds[n].revents & ev_fds[n].events))
-            cb(ev_fds[n].fd, ev_fds[n].revents, ev_fdinfo[n].data);
+    *x = (p->x - p->xi.minimum) * (gr_fb_width() - 1) / (p->xi.maximum - p->xi.minimum);
+    *y = (p->y - p->yi.minimum) * (gr_fb_height() - 1) / (p->yi.maximum - p->yi.minimum);
+
+    if (*x >= 0 && *x < gr_fb_width() &&
+           *y >= 0 && *y < gr_fb_height()) {
+        return 0;
     }
+
+    return 1;
 }
 
-int ev_get_input(int fd, short revents, struct input_event *ev)
+/* Translate a virtual key in to a real key event, if needed */
+/* Returns non-zero when the event should be consumed */
+static int vk_modify(struct ev *e, struct input_event *ev)
 {
-    int r;
+    int i;
+    int x, y;
 
-    if (revents & POLLIN) {
-        r = read(fd, ev, sizeof(*ev));
-        if (r == sizeof(*ev))
+    if (ev->type == EV_KEY) {
+        if (ev->code == BTN_TOUCH)
+            e->p.pressed = ev->value;
+        return 0;
+    }
+
+    if (ev->type == EV_ABS) {
+        switch (ev->code) {
+        case ABS_X:
+            e->p.x = ev->value;
+            return !vk_inside_display(e->p.x, &e->p.xi, gr_fb_width());
+        case ABS_Y:
+            e->p.y = ev->value;
+            return !vk_inside_display(e->p.y, &e->p.yi, gr_fb_height());
+        case ABS_MT_POSITION_X:
+            if (e->mt_idx) return 1;
+            e->mt_p.x = ev->value;
+            return !vk_inside_display(e->mt_p.x, &e->mt_p.xi, gr_fb_width());
+        case ABS_MT_POSITION_Y:
+            if (e->mt_idx) return 1;
+            e->mt_p.y = ev->value;
+            return !vk_inside_display(e->mt_p.y, &e->mt_p.yi, gr_fb_height());
+        case ABS_MT_TOUCH_MAJOR:
+            if (e->mt_idx) return 1;
+            if (e->sent)
+                e->mt_p.pressed = (ev->value > 0);
+            else
+                e->mt_p.pressed = (ev->value > PRESS_THRESHHOLD);
             return 0;
+        }
+
+        return 0;
     }
-    return -1;
-}
 
-int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data)
-{
-    unsigned long key_bits[BITS_TO_LONGS(KEY_MAX)];
-    unsigned long ev_bits[BITS_TO_LONGS(EV_MAX)];
-    unsigned i;
-    int ret;
+    if (ev->type != EV_SYN)
+        return 0;
 
-    for (i = 0; i < ev_dev_count; i++) {
-        int code;
+    if (ev->code == SYN_MT_REPORT) {
+        /* Ignore the rest of the points */
+        ++e->mt_idx;
+        return 1;
+    }
+    if (ev->code != SYN_REPORT)
+        return 0;
 
-        memset(key_bits, 0, sizeof(key_bits));
-        memset(ev_bits, 0, sizeof(ev_bits));
+    /* Report complete */
 
-        ret = ioctl(ev_fds[i].fd, EVIOCGBIT(0, sizeof(ev_bits)), ev_bits);
-        if (ret < 0 || !test_bit(EV_KEY, ev_bits))
-            continue;
+    e->mt_idx = 0;
 
-        ret = ioctl(ev_fds[i].fd, EVIOCGKEY(sizeof(key_bits)), key_bits);
-        if (ret < 0)
-            continue;
+    if (!e->p.pressed && !e->mt_p.pressed) {
+        /* No touch */
+        e->sent = 0;
+        return 0;
+    }
 
-        for (code = 0; code <= KEY_MAX; code++) {
-            if (test_bit(code, key_bits))
-                set_key_cb(code, 1, data);
+    if (!(e->p.pressed && vk_tp_to_screen(&e->p, &x, &y)) &&
+            !(e->mt_p.pressed && vk_tp_to_screen(&e->mt_p, &x, &y))) {
+        /* No touch inside vk area */
+        return 0;
+    }
+
+    if (e->sent) {
+        /* We've already sent a fake key for this touch */
+        return 1;
+    }
+
+    /* The screen is being touched on the vk area */
+    e->sent = 1;
+
+    for (i = 0; i < e->vk_count; ++i) {
+        int xd = ABS(e->vks[i].centerx - x);
+        int yd = ABS(e->vks[i].centery - y);
+        if (xd < e->vks[i].width/2 && yd < e->vks[i].height/2) {
+            /* Fake a key event */
+            ev->type = EV_KEY;
+            ev->code = e->vks[i].scancode;
+            ev->value = 1;
+
+            vibrate(VIBRATOR_TIME_MS);
+            return 0;
         }
     }
 
-    return 0;
+    return 1;
+}
+
+int ev_get(struct input_event *ev, unsigned dont_wait)
+{
+    int r;
+    unsigned n;
+
+    do {
+        r = poll(ev_fds, ev_count, dont_wait ? 0 : -1);
+
+        if(r > 0) {
+            for(n = 0; n < ev_count; n++) {
+                if(ev_fds[n].revents & POLLIN) {
+                    r = read(ev_fds[n].fd, ev, sizeof(*ev));
+                    if(r == sizeof(*ev)) {
+                        if (!vk_modify(&evs[n], ev))
+                            return 0;
+                    }
+                }
+            }
+        }
+    } while(dont_wait == 0);
+
+    return -1;
 }
 
