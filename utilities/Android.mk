@@ -1,5 +1,8 @@
 LOCAL_PATH := $(call my-dir)
 
+ifndef BOARD_HAS_SMALL_RECOVERY
+
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := fix_permissions
 LOCAL_MODULE_TAGS := eng debug
