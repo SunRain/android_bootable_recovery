@@ -17,6 +17,7 @@
 #ifndef RECOVERY_COMMON_H
 #define RECOVERY_COMMON_H
 
+#include <errno.h>
 #include <stdio.h>
 
 // Initialize the graphics system.
@@ -150,6 +151,8 @@ typedef struct {
 
 // fopen a file, mounting volumes and making parent dirs as necessary.
 FILE* fopen_path(const char *path, const char *mode);
+
+int usb_connected(void);
 
 // external applets prototypes
 int busybox_driver(int argc, char **argv);
