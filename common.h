@@ -25,6 +25,7 @@ void ui_init();
 
 // Use KEY_* codes from <linux/input.h> or KEY_DREAM_* from "minui/minui.h".
 int ui_wait_key();            // waits for a key/button press, returns the code
+int ui_wait_key_with_repeat();
 int ui_key_pressed(int key);  // returns >0 if the code is currently pressed
 int ui_text_visible();        // returns >0 if text log is currently visible
 int ui_text_ever_visible();   // returns >0 if text log was ever visible
@@ -36,6 +37,7 @@ void ui_clear_key_queue();
 // so keep the output short and not too cryptic.
 void ui_print(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void ui_printlogtail(int nb_lines);
+void ui_print_status(char* text);
 
 void ui_reset_text_col();
 void ui_set_show_text(int value);

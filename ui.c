@@ -580,6 +580,47 @@ void ui_reset_text_col()
     pthread_mutex_unlock(&gUpdateMutex);
 }
 
+/*
+ * print a line without log and stay on current row
+ * for file listing during backup/restore
+ */
+void ui_print_status(char* line)
+{
+    int len = strlen(line);
+
+    if (!len) return;
+    if (!ui_has_initialized) return;
+
+    // one single line
+    text_col = 0;
+    pthread_mutex_lock(&gUpdateMutex);
+    if (text_rows > 0 && text_cols > 0) {
+        char *ptr;
+        for (ptr = line; *ptr != '\0'; ++ptr) {
+            if (*ptr == '\n' || text_col >= text_cols) {
+                break;
+            }
+            text[text_row][text_col++] = *ptr;
+        }
+        text[text_row][text_col] = '\0';
+    }
+/*
+    int row = menu_top+1;
+    for (; row < text_rows; ++row) {
+        gr_color(0, 0, 0, 160);
+        gr_fill(0, row*CHAR_HEIGHT, gr_fb_width(), CHAR_HEIGHT);
+
+        gr_color(NORMAL_TEXT_COLOR);
+        draw_text_line(row, text[(row+text_top) % text_rows]);
+    }
+    gr_flip();
+*/
+    // or... with progress bar
+    update_screen_locked();
+
+    pthread_mutex_unlock(&gUpdateMutex);
+}
+
 #define MENU_ITEM_HEADER " - "
 #define MENU_ITEM_HEADER_LENGTH strlen(MENU_ITEM_HEADER)
 
@@ -681,6 +722,20 @@ void ui_show_text(int visible)
 
 int ui_wait_key()
 {
+    if (boardEnableKeyRepeat) return ui_wait_key_with_repeat();
+    pthread_mutex_lock(&key_queue_mutex);
+    while (key_queue_len == 0) {
+        pthread_cond_wait(&key_queue_cond, &key_queue_mutex);
+    }
+
+    int key = key_queue[0];
+    memcpy(&key_queue[0], &key_queue[1], sizeof(int) * --key_queue_len);
+    pthread_mutex_unlock(&key_queue_mutex);
+    return key;
+}
+
+int ui_wait_key_with_repeat()
+{
     int key = -1;
 
     // Time out after UI_WAIT_KEY_TIMEOUT_SEC, unless a USB cable is
@@ -706,6 +761,7 @@ int ui_wait_key()
 
             unsigned long now_msec;
             struct timeval now;
+            int k = 0;
 
             usleep(1);
             gettimeofday(&now, NULL);
@@ -716,34 +772,29 @@ int ui_wait_key()
             memcpy(&key_queue[0], &key_queue[1], sizeof(int) * --key_queue_len);
             pthread_mutex_unlock(&key_queue_mutex);
 
-            if (boardEnableKeyRepeat) {
-                int k = 0;
-                if (!key_pressed[key]) {
-                    if (key_last_repeat[key] > 0) continue;
-                    else return key;
-                }
-                for (;k < boardNumRepeatableKeys; ++k) {
-                    if (boardRepeatableKeys[k] == key) break;
-                }
-                if (k < boardNumRepeatableKeys) {
-                    key_queue[key_queue_len] = key;
-                    key_queue_len++;
+            if (!key_pressed[key]) {
+                if (key_last_repeat[key] > 0) continue;
+                else return key;
+            }
+            for (;k < boardNumRepeatableKeys; ++k) {
+                if (boardRepeatableKeys[k] == key) break;
+            }
+            if (k < boardNumRepeatableKeys) {
+                key_queue[key_queue_len] = key;
+                key_queue_len++;
 
-                    if ((now_msec > (key_press_time[key] + UI_KEY_WAIT_REPEAT) &&
-                         now_msec > (key_last_repeat[key] + UI_KEY_REPEAT_INTERVAL))
-                        || key_last_repeat[key] == 0)
-                    {
-                        key_last_repeat[key] = now_msec;
-
-                    } else if (key_last_repeat[key] > 0) {
-                        continue;
-                    }
+                if ((now_msec > key_press_time[key] + UI_KEY_WAIT_REPEAT &&
+                     now_msec > key_last_repeat[key] + UI_KEY_REPEAT_INTERVAL)
+                    || key_last_repeat[key] == 0)
+                {
+                    key_last_repeat[key] = now_msec;
+                } else if (key_last_repeat[key] > 0) {
+                    continue;
                 }
             }
             return key;
         }
     } while (key_queue_len == 0);
-
     return key;
 }
 
