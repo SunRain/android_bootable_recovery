@@ -102,7 +102,14 @@ int TWPartitionManager::Write_Fstab(void) {
 	}
 	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
 		if ((*iter)->Can_Be_Mounted) {
-			Line = (*iter)->Actual_Block_Device + " " + (*iter)->Mount_Point + " " + (*iter)->Current_File_System + " rw\n";
+			if ((*iter)->Current_File_System == "vfat")
+			{
+				Line = (*iter)->Actual_Block_Device + " " + (*iter)->Mount_Point + " " + (*iter)->Current_File_System + " rw,shortname=mixed,utf8\n";
+			}
+			else
+			{
+				Line = (*iter)->Actual_Block_Device + " " + (*iter)->Mount_Point + " " + (*iter)->Current_File_System + " rw\n";
+			}
 			fputs(Line.c_str(), fp);
 			// Handle subpartition tracking
 			if ((*iter)->Is_SubPartition) {
@@ -589,6 +596,17 @@ int TWPartitionManager::Run_Backup(void) {
 	unsigned long long total_bytes = 0, file_bytes = 0, img_bytes = 0, free_space = 0, img_bytes_remaining, file_bytes_remaining, subpart_size;
 	unsigned long img_time = 0, file_time = 0;
 	TWPartition* backup_sys = NULL;
+
+	backup_sys = Find_Partition_By_Path("/and-sec");
+	backup_sys->Backup_Path = "/and-sec";
+	backup_sys = Find_Partition_By_Path("/cache");
+	backup_sys->Backup_Path = "/cache";
+	backup_sys = Find_Partition_By_Path("/data");
+	backup_sys->Backup_Path = "/data";
+	backup_sys = Find_Partition_By_Path("/system");
+	backup_sys->Backup_Path = "/system";
+	backup_sys = NULL;
+
 	TWPartition* backup_data = NULL;
 	TWPartition* backup_cache = NULL;
 	TWPartition* backup_recovery = NULL;
@@ -635,6 +653,7 @@ int TWPartitionManager::Run_Backup(void) {
 		LOGE("Failed to make backup folder.\n");
 		return false;
 	}
+
 
 	LOGI("Calculating backup details...\n");
 	DataManager::GetValue(TW_BACKUP_SYSTEM_VAR, check);
@@ -1127,6 +1146,68 @@ void TWPartitionManager::Set_Restore_Files(string Restore_Name) {
 			DataManager::SetValue(TW_RESTORE_FILE_DATE, backup_date);
 			get_date = false;
 		}
+		if (strcmp(str, ".android_secure.vfat.tar") == 0 || strcmp(str, ".android_secure.vfat.tar.a") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/and-sec");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/and_sec";
+			tw_restore_andsec = 1;
+			system("mkdir -p /and_sec/.android_secure");
+			system("mount /sdcard/.android_secure /and_sec/.android_secure");
+			continue;
+		}
+		if (strcmp(str, "boot.img") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/boot");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/boot";
+			tw_restore_boot = 1;
+			continue;
+		}
+		if (strcmp(str, "recovery.img") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/recovery");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/recovery";
+			tw_restore_recovery = 1;
+			continue;
+		}
+		if (strcmp(str, "cache.ext4.tar") == 0 || strcmp(str, "cache.ext4.tar.a") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/cache");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/";
+			tw_restore_cache = 1;
+			continue;
+		}
+		if (strcmp(str, "data.ext4.tar") == 0 || strcmp(str, "data.ext4.tar.a") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/data");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/";
+			tw_restore_data = 1;
+			continue;
+		}
+		if (strcmp(str, "system.ext4.tar") == 0 || strcmp(str, "system.ext4.tar.a") == 0)
+		{
+			TWPartition* Part = Find_Partition_By_Path("/system");
+			Part->Backup_FileName = de->d_name;
+			Part->Backup_Path = "/";
+			tw_restore_system = 1;
+			continue;
+		}
+		if (strcmp(str, "nandroid.md5") == 0)
+		{
+			continue;
+		}
+		TWPartition* Part = Find_Partition_By_Path("/and-sec");
+		Part->Backup_Path = "/and-sec";
+		Part = Find_Partition_By_Path("/cache");
+		Part->Backup_Path = "/cache";
+		Part = Find_Partition_By_Path("/data");
+		Part->Backup_Path = "/data";
+		Part = Find_Partition_By_Path("/system");
+		Part->Backup_Path = "/system";
 
 		label = str;
 		ptr = label;
@@ -1147,7 +1228,7 @@ void TWPartitionManager::Set_Restore_Files(string Restore_Name) {
 
 		if (extn == NULL || (strlen(extn) >= 3 && strncmp(extn, "win", 3) != 0))   continue;
 
-		TWPartition* Part = Find_Partition_By_Path(label);
+		Part = Find_Partition_By_Path(label);
 		if (Part == NULL)
 		{
 			LOGE(" Unable to locate partition by backup name: '%s'\n", label);
@@ -1607,7 +1688,6 @@ int TWPartitionManager::Fix_Permissions(void) {
 
 	fixPermissions perms;
 	result = perms.fixPerms(true, false);
-	UnMount_Main_Partitions();
 	ui_print("Done.\n\n");
 	return result;
 }

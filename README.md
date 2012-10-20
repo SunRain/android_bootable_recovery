@@ -1,5 +1,6 @@
-<<<<<<< HEAD
-TWRP_2.3.1.1_cn
+
+基于TWRP2.3汉化,支持中文字符,并兼容恢复cwm的备份包
+
 ===============
 =======
 **Team Win Recovery Project (TWRP)**
@@ -13,4 +14,3 @@ You can find a compiling guide [here](http://rootzwiki.com/topic/23903-how-to-co
 [More information about the project.](http://www.teamw.in/project/twrp2 "More Information")
 
 If you have code changes to submit those should be pushed to our gerrit instance.  A guide can be found [here](http://teamw.in/twrp2-gerrit "Gerrit Guide").
->>>>>>> 1a650e6fc4b0c1fa2fdf168f0a119bdf11bc8896

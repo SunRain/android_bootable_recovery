@@ -789,6 +789,8 @@ int DataManager::GetMagicValue(const string varName, string& value)
 		{
 			char cap_s[4];
 			FILE * cap = fopen("/sys/class/power_supply/battery/capacity","rt");
+			if (!cap)
+				cap = fopen("/sys/class/power_supply/batterys/capacity","rt");
 			if (cap){
 				fgets(cap_s, 4, cap);
 				fclose(cap);

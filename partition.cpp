@@ -120,14 +120,6 @@ bool TWPartition::Process_Fstab_Line(string Line, bool Display_Error) {
 			if (Fstab_File_System == "mtd" || Fstab_File_System == "yaffs2") {
 				MTD_Name = ptr;
 				Find_MTD_Block_Device(MTD_Name);
-			} else if (Fstab_File_System == "bml") {
-				if (Mount_Point == "/boot")
-					MTD_Name = "boot";
-				else if (Mount_Point == "/recovery")
-					MTD_Name = "recovery";
-				Primary_Block_Device = ptr;
-				if (*ptr != '/')
-					LOGE("Until we get better BML support, you will have to find and provide the full block device path to the BML devices e.g. /dev/block/bml9 instead of the partition name\n");
 			} else if (*ptr != '/') {
 				if (Display_Error)
 					LOGE("Invalid block device on '%s', '%s', %i\n", Line.c_str(), ptr, index);
@@ -366,7 +358,8 @@ bool TWPartition::Is_File_System(string File_System) {
 }
 
 bool TWPartition::Is_Image(string File_System) {
-	if (File_System == "emmc" || File_System == "mtd" || File_System == "bml")
+	if (File_System == "emmc" ||
+		File_System == "mtd")
 		return true;
 	else
 		return false;
@@ -406,7 +399,7 @@ void TWPartition::Setup_Image(bool Display_Error) {
 	Backup_Name = Display_Name;
 	if (Fstab_File_System == "emmc")
 		Backup_Method = DD;
-	else if (Fstab_File_System == "mtd" || Fstab_File_System == "bml")
+	else if (Fstab_File_System == "mtd")
 		Backup_Method = FLASH_UTILS;
 	else
 		LOGI("Unhandled file system '%s' on image '%s'\n", Fstab_File_System.c_str(), Display_Name.c_str());
@@ -646,24 +639,40 @@ bool TWPartition::Mount(bool Display_Error) {
 	// Check the current file system before mounting
 	Check_FS_Type();
 
-	if (mount(Actual_Block_Device.c_str(), Mount_Point.c_str(), Current_File_System.c_str(), 0, NULL) != 0) {
-		if (Display_Error)
-			LOGE("Unable to mount '%s'\n", Mount_Point.c_str());
-		else
-			LOGI("Unable to mount '%s'\n", Mount_Point.c_str());
-		LOGI("Actual block device: '%s', current file system: '%s'\n", Actual_Block_Device.c_str(), Current_File_System.c_str());
-		return false;
-	} else {
-		if (Removable)
-			Update_Size(Display_Error);
+//	ui_print("Actual_Block_Device=%s\nMount_Point=%s\nCurrent_File_System=%s\n", Actual_Block_Device.c_str(), Mount_Point.c_str(), Current_File_System.c_str());
 
-		if (!Symlink_Mount_Point.empty()) {
-			string Command;
-
+	if (Current_File_System == "vfat")
+	{
+		string Command;
+		Command = "mount -t vfat -o shortname=mixed,utf8 " + Actual_Block_Device + " " + Mount_Point;
+		system(Command.c_str());
+		if (!Symlink_Mount_Point.empty())
+		{
 			Command = "mount " + Symlink_Path + " " + Symlink_Mount_Point;
 			system(Command.c_str());
 		}
-		return true;
+	} else {
+		if (mount(Actual_Block_Device.c_str(), Mount_Point.c_str(), Current_File_System.c_str(), 0, NULL) != 0) {
+			if (Display_Error)
+				LOGE("Unable to mount '%s'\n", Mount_Point.c_str());
+			else
+				LOGI("Unable to mount '%s'\n", Mount_Point.c_str());
+			LOGI("Actual block device: '%s', current file system: '%s'\n", Actual_Block_Device.c_str(), Current_File_System.c_str());
+			return false;
+		} else {
+			if (Removable)
+				Update_Size(Display_Error);
+
+			if (!Symlink_Mount_Point.empty()) {
+				string Command;
+//				ui_print("Current_File_System=%s\n", Current_File_System.c_str());
+
+				Command = "mount " + Symlink_Path + " " + Symlink_Mount_Point;
+				system(Command.c_str());
+//				ui_print("Command=%s\n", Command.c_str());
+			}
+			return true;
+		}
 	}
 	return true;
 }
@@ -847,7 +856,7 @@ void TWPartition::Check_FS_Type() {
 	char* arg;
 	char* ptr;
 
-	if (Fstab_File_System == "yaffs2" || Fstab_File_System == "mtd" || Fstab_File_System == "bml")
+	if (Fstab_File_System == "yaffs2" || Fstab_File_System == "mtd")
 		return; // Running blkid on some mtd devices causes a massive crash
 
 	Find_Actual_Block_Device();

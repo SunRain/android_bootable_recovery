@@ -142,9 +142,11 @@ int GUIText::Render(void)
 		gr_color(mColor.red, mColor.green, mColor.blue, mColor.alpha);
 
 	if (maxWidth)
-		gr_textExW(x, y, displayValue.c_str(), fontResource, maxWidth + x);
+//		gr_textExW(x, y, displayValue.c_str(), fontResource, maxWidth + x);
+		gr_textExW(x, y, displayValue.c_str(), NULL, maxWidth + x);
 	else
-		gr_textEx(x, y, displayValue.c_str(), fontResource);
+//		gr_textEx(x, y, displayValue.c_str(), fontResource);
+		gr_textEx(x, y, displayValue.c_str(), NULL);
     return 0;
 }
 
@@ -176,7 +178,8 @@ int GUIText::GetCurrentBounds(int& w, int& h)
     if (mFont)  fontResource = mFont->GetResource();
 
     h = mFontHeight;
-    w = gr_measureEx(mLastValue.c_str(), fontResource);
+//    w = gr_measureEx(mLastValue.c_str(), fontResource);
+    w = gr_measureEx(mLastValue.c_str(), NULL);
     return 0;
 }
 
