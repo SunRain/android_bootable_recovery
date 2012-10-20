@@ -1688,6 +1688,7 @@ int TWPartitionManager::Fix_Permissions(void) {
 
 	fixPermissions perms;
 	result = perms.fixPerms(true, false);
+	UnMount_Main_Partitions();
 	ui_print("Done.\n\n");
 	return result;
 }
