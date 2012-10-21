@@ -43,8 +43,8 @@
 	</resources>
 
 	<variables>
-		<variable name="col1_x" value="25" />
-		<variable name="col2_x" value="425" />
+		<variable name="col1_x" value="15" />
+		<variable name="col2_x" value="415" />
 		<variable name="col_center_x" value="213" />
 		<variable name="col_center_medium_x" value="306" />
 		<variable name="center_x" value="400" />
@@ -100,14 +100,14 @@
 		<variable name="home_button_y" value="1226" />
 		<variable name="back_button_x" value="666" />
 		<variable name="back_button_y" value="1226" />
-		<variable name="sort_text_x" value="85" />
+		<variable name="sort_text_x" value="165" />
 		<variable name="sort_asc_text_y" value="1090" />
 		<variable name="sort_asc_button_y" value="1080" />
 		<variable name="sort_desc_text_y" value="1150" />
 		<variable name="sort_desc_button_y" value="1140" />
-		<variable name="sort_col1_button_x" value="330" />
-		<variable name="sort_col2_button_x" value="430" />
-		<variable name="sort_col3_button_x" value="530" />
+		<variable name="sort_col1_button_x" value="290" />
+		<variable name="sort_col2_button_x" value="405" />
+		<variable name="sort_col3_button_x" value="520" />
 		<variable name="input_width" value="750" />
 		<variable name="input_height" value="50" />
 		<variable name="input_background_color" value="#303030" />
@@ -122,7 +122,7 @@
 		<variable name="console_install_height" value="600" />
 		<variable name="console_installdone_height" value="440" />
 		<variable name="fileselector_x" value="5" />
-		<variable name="fileselector_width" value="800" />
+		<variable name="fileselector_width" value="790" />
 		<variable name="fileselector_install_height" value="750" />
 		<variable name="fileselector_header_background" value="#202020" />
 		<variable name="fileselector_header_textcolor" value="#AAAAAA" />
@@ -133,11 +133,11 @@
 		<variable name="fileselector_background" value="#303030" />
 		<variable name="fileselector_spacing" value="36"/>
 		<variable name="listbox_x" value="5" />
-		<variable name="listbox_width" value="710" />
+		<variable name="listbox_width" value="790" />
 		<variable name="listbox_tz_height" value="540" />
 		<variable name="listbox_background" value="#303030" />
 		<variable name="listbox_spacing" value="16" />
-		<variable name="sd_plus_x" value="350" />
+		<variable name="sd_plus_x" value="400" />
 		<variable name="sdext_text_x" value="115" />
 		<variable name="sdext_text_y" value="190" />
 		<variable name="sdswap_button_y" value="260" />
@@ -319,36 +319,36 @@
 
 		<template name="keyboardtemplate">
 			<object type="keyboard">
-				<placement x="0" y="740" />
+				<placement x="0" y="745" />
 				<layout resource1="keyboard1" resource2="keyboard2" resource3="keyboard3" resource4="keyboard4" />
-				<highlight color="#90909080" />
+				<highlight color="#18181880" />
 				<layout1>
 					<keysize height="115" width="80" />
 					<row1 key01="q" long01="1" key02="w" long02="2" key03="e" long03="3" key04="r" long04="4" key05="t" long05="5" key06="y" long06="6" key07="u" long07="7" key08="i" long08="8" key09="o" long09="9" key10="p" long10="0" />
-					<row2 key01="108:a" key02="s" key03="d" key04="f" key05="g" key06="h" key07="j" key08="k" key09="108:l" />
-					<row3 key01="108:layout2" key02="z" key03="x" key04="c" key05="v" key06="b" key07="n" key08="m" key09="108:c:8" />
-					<row4 key01="104:layout3" key02="150:" key03="390: " key04="80:." key05="180:a:action" />
+					<row2 key01="40:" key02="a" key03="s" key04="d" key05="f" key06="g" key07="h" key08="j" key09="k" key10="80:l" />
+					<row3 key01="120:layout2" key02="z" key03="x" key04="c" key05="v" key06="b" key07="n" key08="m" key09="120:c:8" />
+					<row4 key01="122:layout3" key02="78:" key03="400: " key04="80:." key05="130:a:action" />
 				</layout1>
 				<layout2>
-					<keysize height="116" width="80" />
+					<keysize height="115" width="80" />
 					<row1 key01="Q" long01="1" key02="W" long02="2" key03="E" long03="3" key04="R" long04="4" key05="T" long05="5" key06="Y" long06="6" key07="U" long07="7" key08="I" long08="8" key09="O" long09="9" key10="P" long10="0" />
-					<row2 key01="108:A" key02="S" key03="D" key04="F" key05="G" key06="H" key07="J" key08="K" key09="108:L" />
-					<row3 key01="108:layout1" key02="Z" key03="X" key04="C" key05="V" key06="B" key07="N" key08="M" key09="108:c:8" />
-					<row4 key01="117:layout3" key02="80:," key03="400: " key04="80:." key05="123:action" />
+					<row2 key01="40:" key02="A" key03="S" key04="D" key05="F" key06="G" key07="H" key08="J" key09="K" key10="80:L" />
+					<row3 key01="120:layout1" key02="Z" key03="X" key04="C" key05="V" key06="B" key07="N" key08="M" key09="120:c:8" />
+					<row4 key01="122:layout3" key02="78:" key03="400: " key04="80:." key05="130:a:action" />
 				</layout2>
 				<layout3>
 					<keysize height="115" width="80" />
 					<row1 key01="1" key02="2" key03="3" key04="4" key05="5" key06="6" key07="7" key08="8" key09="9" key10="0" />
 					<row2 key01="@" key02="#" key03="$" key04="%" key05="&" key06="*" key07="-" key08="+" key09="(" key10=")" />
-					<row3 key01="108:layout4" key02="!" key03="72:c:34" key04="'" key05=":" key06=";" key07="/" key08="?" key09="108:c:8" />
-					<row4 key01="117:layout1" key02="80:," key03="400: " key04="80:." key05="123:action" />
+					<row3 key01="120:layout4" key02="!" key03="80:c:34" key04="'" key05=":" key06=";" key07="/" key08="?" key09="120:c:8" />
+					<row4 key01="122:layout1" key02="78:," key03="400: " key04="80:." key05="130:action" />
 				</layout3>
 				<layout4>
 					<keysize height="116" width="80" />
 					<row1 key01="~" key02="`" key03="|" key04="80:" key05="80:" key06="80:" key07="80:" key08="80:" key09="{" key10="}" />
 					<row2 key01="80:" key02="80:" key03="80:" key04="80:" key05="80:" key06="^" key07="_" key08="=" key09="[" key10="]" />
-					<row3 key01="115:layout3" key02="80:" key03="80:" key04="80:" key05="80:" key06="\" key07="<" key08=">" key09="108:c:8" />
-					<row4 key01="117:layout1" key02="80:" key03="400: " key04="80:" key05="123:action" />
+					<row3 key01="120:layout3" key02="80:" key03="80:" key04="80:" key05="80:" key06="\" key07="<" key08=">" key09="120:c:8" />
+					<row4 key01="122:layout1" key02="78:" key03="400: " key04="80:" key05="130:action" />
 				</layout4>
 			</object>
 		</template>
