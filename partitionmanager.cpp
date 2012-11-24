@@ -654,7 +654,6 @@ int TWPartitionManager::Run_Backup(void) {
 		return false;
 	}
 
-
 	LOGI("Calculating backup details...\n");
 	DataManager::GetValue(TW_BACKUP_SYSTEM_VAR, check);
 	if (check) {
@@ -1146,6 +1145,7 @@ void TWPartitionManager::Set_Restore_Files(string Restore_Name) {
 			DataManager::SetValue(TW_RESTORE_FILE_DATE, backup_date);
 			get_date = false;
 		}
+
 		if (strcmp(str, ".android_secure.vfat.tar") == 0 || strcmp(str, ".android_secure.vfat.tar.a") == 0)
 		{
 			TWPartition* Part = Find_Partition_By_Path("/and-sec");
@@ -1663,6 +1663,15 @@ int TWPartitionManager::Decrypt_Device(string Password) {
 			ui_print("Data successfully decrypted, new block device: '%s'\n", crypto_blkdev);
 			// Sleep for a bit so that the device will be ready
 			sleep(1);
+#ifdef RECOVERY_SDCARD_ON_DATA
+			if (dat->Mount(false) && TWFunc::Path_Exists("/data/media/0")) {
+				dat->Storage_Path = "/data/media/0";
+				dat->Symlink_Path = dat->Storage_Path;
+				DataManager::SetValue(TW_INTERNAL_PATH, "/data/media/0");
+				dat->UnMount(false);
+				DataManager::SetBackupFolder();
+			}
+#endif
 			Update_System_Details();
 			UnMount_Main_Partitions();
 		} else

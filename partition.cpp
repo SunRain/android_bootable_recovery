@@ -183,14 +183,19 @@ bool TWPartition::Process_Fstab_Line(string Line, bool Display_Error) {
 			Has_Data_Media = true;
 			Is_Storage = true;
 			Storage_Path = "/data/media";
+			Symlink_Path = Storage_Path;
 			if (strcmp(EXPAND(TW_EXTERNAL_STORAGE_PATH), "/sdcard") == 0) {
 				Make_Dir("/emmc", Display_Error);
-				Symlink_Path = "/data/media";
 				Symlink_Mount_Point = "/emmc";
 			} else {
 				Make_Dir("/sdcard", Display_Error);
-				Symlink_Path = "/data/media";
 				Symlink_Mount_Point = "/sdcard";
+			}
+			if (Mount(false) && TWFunc::Path_Exists("/data/media/0")) {
+				Storage_Path = "/data/media/0";
+				Symlink_Path = Storage_Path;
+				DataManager::SetValue(TW_INTERNAL_PATH, "/data/media/0");
+				UnMount(true);
 			}
 #endif
 #ifdef TW_INCLUDE_CRYPTO
@@ -359,6 +364,7 @@ bool TWPartition::Is_File_System(string File_System) {
 		File_System == "vfat" ||
 		File_System == "ntfs" ||
 		File_System == "yaffs2" ||
+		File_System == "exfat" ||
 		File_System == "auto")
 		return true;
 	else
@@ -646,8 +652,6 @@ bool TWPartition::Mount(bool Display_Error) {
 	// Check the current file system before mounting
 	Check_FS_Type();
 
-//	ui_print("Actual_Block_Device=%s\nMount_Point=%s\nCurrent_File_System=%s\n", Actual_Block_Device.c_str(), Mount_Point.c_str(), Current_File_System.c_str());
-
 	if (Current_File_System == "vfat")
 	{
 		string Command;
@@ -672,11 +676,9 @@ bool TWPartition::Mount(bool Display_Error) {
 
 			if (!Symlink_Mount_Point.empty()) {
 				string Command;
-//				ui_print("Current_File_System=%s\n", Current_File_System.c_str());
 
 				Command = "mount " + Symlink_Path + " " + Symlink_Mount_Point;
 				system(Command.c_str());
-//				ui_print("Command=%s\n", Command.c_str());
 			}
 			return true;
 		}
@@ -1069,24 +1071,27 @@ bool TWPartition::Wipe_Data_Without_Wiping_Media() {
 		return false;
 
 	ui_print("Wiping data without wiping /data/media ...\n");
-	system("rm -f /data/*");
-	system("rm -f /data/.*");
 
 	DIR* d;
 	d = opendir("/data");
-	if (d != NULL)
-	{
+	if (d != NULL) {
 		struct dirent* de;
 		while ((de = readdir(d)) != NULL) {
-			if (strcmp(de->d_name, "media") == 0)   continue;
+			if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)   continue;
+			// The media folder is the "internal sdcard"
+			// The .layout_version file is responsible for determining whether 4.2 decides up upgrade
+			//    the media folder for multi-user.
+			if (strcmp(de->d_name, "media") == 0 || strcmp(de->d_name, ".layout_version") == 0)   continue;
 
 			sprintf(cmd, "rm -fr /data/%s", de->d_name);
 			system(cmd);
 		}
 		closedir(d);
+		ui_print("Done.\n");
+		return true;
 	}
-	ui_print("Done.\n");
-	return true;
+	ui_print("Dirent failed to open /data, error!\n");
+	return false;
 }
 
 bool TWPartition::Backup_Tar(string backup_folder) {
