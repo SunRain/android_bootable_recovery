@@ -448,7 +448,7 @@ int gr_textExW(int x, int y, const char *s, void* pFont, int max_width)
     /* Handle default font */
     if (!gfont)  gfont = gr_font;
 
-    y -= gfont->ascent;
+//    y -= gfont->ascent;
 
     gl->texEnvi(gl, GGL_TEXTURE_ENV, GGL_TEXTURE_ENV_MODE, GGL_REPLACE);
     gl->texGeni(gl, GGL_S, GGL_TEXTURE_GEN_MODE, GGL_ONE_TO_ONE);
@@ -886,7 +886,7 @@ static void gr_init_font(void)
 
     gr_font->cwidth = font.cwidth;
     gr_font->cheight = font.cheight;
-    gr_font->ascent = font.cheight % 2 + 8;
+    gr_font->ascent = (font.cheight/2)+(font.cheight%2)-19;
 }
 
 int gr_init(void)

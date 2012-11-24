@@ -1,8 +1,9 @@
-
 基于TWRP2.3汉化,支持中文字符,并兼容恢复cwm的备份包
 
-===============
-=======
+字库可由minuitwrp/chinese_gen.rb生成
+已生成部分字库,默认为40号雅黑字体,也可替换yahei_*目录内对应的字库
+
+-------------------------------------
 **Team Win Recovery Project (TWRP)**
 
 The goal of this branch is to rebase TWRP onto AOSP while maintaining as much of the original AOSP code as possible. This goal should allow us to apply updates to the AOSP code going forward with little to no extra work.  With this goal in mind, we will carefully consider any changes needed to the AOSP code before allowing them.  In most cases, instead of changing the AOSP code, we'll create our own functions instead.  The only changes that should be made to AOSP code should be those affecting startup of the recovery and some of the make files.

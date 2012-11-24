@@ -179,7 +179,7 @@
 				<condition var1="tw_simulate_actions" var2="1" />
 				<font resource="font" />
 				<placement x="120" y="45" />
-				<text>模拟动作</text>
+				<text>模拟操作</text>
 			</object>
 
 			<object type="text" color="%text_color%">
@@ -1223,7 +1223,24 @@
 					<action function="set">tw_text1=清除SD-Ext?</action>
 					<action function="set">tw_action_text1=清除SD-Ext中...</action>
 					<action function="set">tw_complete_text1=SD-Ext清除完成</action>
-					<action function="set">tw_slider_text=Swipe to Wipe</action>
+					<action function="set">tw_slider_text=滑动按钮开始清除</action>
+					<action function="page">confirm_action</action>
+				</actions>
+			</object>
+
+			<object type="button">
+				<placement x="%col2_x%" y="%row4_y%" />
+				<font resource="font" color="%button_text_color%" />
+				<text>电量统计</text>
+				<image resource="main_button" />
+				<actions>
+					<action function="set">tw_back=wipe</action>
+					<action function="set">tw_action=wipe</action>
+					<action function="set">tw_action_param=battery</action>
+					<action function="set">tw_text1=清除电量统计?</action>
+					<action function="set">tw_action_text1=清除电量统计中...</action>
+					<action function="set">tw_complete_text1=电量统计清除完成</action>
+					<action function="set">tw_slider_text=滑动按钮开始清除</action>
 					<action function="page">confirm_action</action>
 				</actions>
 			</object>
@@ -1680,7 +1697,7 @@
 				<actions>
 					<action function="set">tw_back=restore</action>
 					<action function="set">tw_action=cmd</action>
-					<action function="set">tw_action_param=cd %tw_backups_folder% && rm -rf %tw_restore_name%</action>
+					<action function="set">tw_action_param=cd %tw_backups_folder% && rm -rf &quot;%tw_restore_name%&quot;</action>
 					<action function="set">tw_text1=删除备份? %tw_restore_name%</action>
 					<action function="set">tw_text2=这将无法恢复!</action>
 					<action function="set">tw_action_text1=删除备份中...</action>
@@ -1830,7 +1847,7 @@
 				<actions>
 					<action function="set">tw_back=restore</action>
 					<action function="set">tw_action=cmd</action>
-					<action function="set">tw_action_param=cd %tw_backups_folder% && mv %tw_restore_name% %tw_backup_rename%</action>
+					<action function="set">tw_action_param=cd %tw_backups_folder% && mv &quot;%tw_restore_name%&quot; &quot;%tw_backup_rename%&quot;</action>
 					<action function="set">tw_text1=重命名备份?</action>
 					<action function="set">tw_text2=这将无法恢复!</action>
 					<action function="set">tw_action_text1=重命名备份中...</action>
@@ -2358,7 +2375,7 @@
 			<object type="checkbox">
 				<placement x="%col1_x%" y="%row7_text_y%" />
 				<font resource="font" color="%text_color%" />
-				<text>主题测试时的模拟动作.</text>
+				<text>主题测试时的模拟操作.</text>
 				<data variable="tw_simulate_actions" />
 				<image checked="checkbox_true" unchecked="checkbox_false" />
 			</object>
@@ -2367,7 +2384,7 @@
 				<condition var1="tw_simulate_actions" var2="1" />
 				<placement x="%col1_x%" y="%row8_text_y%" />
 				<font resource="font" color="%text_color%" />
-				<text>模拟动作的失败.</text>
+				<text>模拟失败的操作.</text>
 				<data variable="tw_simulate_fail" />
 				<image checked="checkbox_true" unchecked="checkbox_false" />
 			</object>
@@ -2937,7 +2954,7 @@
 			<object type="text" color="%text_color%">
 				<font resource="font" />
 				<placement x="%center_x%" y="%row1_text_y%" placement="5"/>
-				<text>%tw_fm_type% Selected:</text>
+				<text>已选择%tw_fm_type%:</text>
 			</object>
 
 			<object type="text" color="%text_color%">
