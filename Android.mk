@@ -239,14 +239,16 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_STATIC_LIBRARIES :=
 LOCAL_SHARED_LIBRARIES :=
 
-LOCAL_STATIC_LIBRARIES += ${EXTRA_STATIC_LIBRARIES} ${EXTRA_SHARED_LIBRARIES}
+LOCAL_STATIC_LIBRARIES += libext4_utils libz
 LOCAL_STATIC_LIBRARIES += libminzip libunz libmincrypt
-LOCAL_STATIC_LIBRARIES += libminizip libminadbd libedify libbusybox libmkyaffs2image libunyaffs liberase_image libdump_image libflash_image
-LOCAL_STATIC_LIBRARIES += libdedupe libcrypto_static libcrecovery libflashutils libmtdutils libmmcutils libbmlutils
-LOCAL_STATIC_LIBRARIES += libminuitwrp libpixelflinger_static libpng libjpegtwrp libgui libminui
-LOCAL_STATIC_LIBRARIES += libz libc libstlport_static libcutils libstdc++  libext4_utils
+LOCAL_STATIC_LIBRARIES += libminizip libedify libbusybox libmkyaffs2image libunyaffs liberase_image libdump_image libflash_image libminadbd
+LOCAL_STATIC_LIBRARIES += libcrypto libcrecovery libflashutils libmtdutils libmmcutils libbmlutils
+LOCAL_STATIC_LIBRARIES += libminuitwrp libminui libpixelflinger_static libpng libjpegtwrp libgui
+LOCAL_STATIC_LIBRARIES += libcutils libstdc++ libc libstlport_static
 
-RECOVERY_LINKS := edify busybox flash_image dump_image mkyaffs2image unyaffs erase_image nandroid reboot volume setprop dedupe minizip
+#LOCAL_STATIC_LIBRARIES += libdedupe 
+
+LOCAL_STATIC_LIBRARIES += ${EXTRA_STATIC_LIBRARIES} ${EXTRA_SHARED_LIBRARIES}
 
 # This binary is in the recovery ramdisk, which is otherwise a copy of root.
 # It gets copied there in config/Makefile.  LOCAL_MODULE_TAGS suppresses
@@ -290,6 +292,18 @@ LOCAL_STATIC_LIBRARIES := \
     libstdc++ \
     libc
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_STATIC_LIBRARIES := libz
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE := libminizip
+LOCAL_CFLAGS := -Dmain=minizip_main -D__ANDROID__ -DIOAPI_NO_64
+LOCAL_C_INCLUDES := external/zlib
+LOCAL_SRC_FILES := \
+    ../../external/zlib/contrib/minizip/minizip.c \
+    ../../external/zlib/contrib/minizip/zip.c \
+    ../../external/zlib/contrib/minizip/ioapi.c
+include $(BUILD_STATIC_LIBRARY)
 
 commands_recovery_local_path := $(LOCAL_PATH)
 include $(LOCAL_PATH)/minui/Android.mk \
